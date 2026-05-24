@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: auth-gateway
+  datasource:
+    url: jdbc:h2:file:./data/auth-gateway;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:dev-google-client-id}
+            client-secret: ${GOOGLE_CLIENT_SECRET:dev-google-client-secret}
+            scope:
+              - openid
+              - profile
+              - email
+
+server:
+  port: ${PORT:8080}
+  servlet:
+    session:
+      cookie:
+        name: AUTH_GATEWAY_SESSION
+        http-only: true
+        same-site: lax
+
+identity:
+  issuer: ${AUTH_GATEWAY_ISSUER:http://localhost:8080}
+  apps:
+    - id: job-crm-local
+      name: Job CRM
+      description: Application pipeline and interview intelligence
+      url: ${JOB_CRM_URL:http://localhost:3000/job/}
+      enabled: true
+    - id: interview-local
+      name: Interview Intelligence
+      description: Recording review and interview practice
+      url: ${INTERVIEW_URL:http://localhost:3000/}
+      enabled: true
+  clients:
+    - client-id: job-crm-local
+      client-secret: ${JOB_CRM_CLIENT_SECRET:dev-job-crm-secret}
+      redirect-uris:
+        - ${JOB_CRM_REDIRECT_URI:http://localhost:3000/login/oauth2/code/auth-gateway}
+      post-logout-redirect-uris:
+        - ${JOB_CRM_LOGOUT_REDIRECT_URI:http://localhost:3000/job/}
+    - client-id: interview-local
+      client-secret: ${INTERVIEW_CLIENT_SECRET:dev-interview-secret}
+      redirect-uris:
+        - ${INTERVIEW_REDIRECT_URI:http://localhost:3000/login/oauth2/code/auth-gateway}
+      post-logout-redirect-uris:
+        - ${INTERVIEW_LOGOUT_REDIRECT_URI:http://localhost:3000/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

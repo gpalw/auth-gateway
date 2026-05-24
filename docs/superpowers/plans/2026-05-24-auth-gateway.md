@@ -55,6 +55,7 @@ Expand-Archive -Path auth-gateway.zip -DestinationPath .
 Copy-Item -Path auth-gateway-initializr\* -Destination . -Recurse -Force
 Remove-Item auth-gateway.zip -Force
 Remove-Item auth-gateway-initializr -Recurse -Force
+(Get-Content pom.xml) -replace '<version>4.0.6.RELEASE</version>', '<version>4.0.6</version>' | Set-Content pom.xml
 ```
 
 Expected: generated Spring Boot project files exist at the repository root.
@@ -374,4 +375,3 @@ Expected:
 git add README.md .gitignore
 git commit -m "docs: describe auth gateway setup"
 ```
-
