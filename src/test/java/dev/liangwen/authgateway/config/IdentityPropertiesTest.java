@@ -21,7 +21,12 @@ class IdentityPropertiesTest {
                     "identity.clients[0].client-id=job-crm",
                     "identity.clients[0].client-secret=secret",
                     "identity.clients[0].redirect-uris[0]=https://job.example.com/login/oauth2/code/auth-gateway",
-                    "identity.clients[0].post-logout-redirect-uris[0]=https://job.example.com");
+                    "identity.clients[0].post-logout-redirect-uris[0]=https://job.example.com",
+                    "identity.access.allowed-emails=wen@example.com,ADMIN@example.com",
+                    "identity.access.allowed-domains=liangwendev.com,@example.org",
+                    "identity.access.require-verified-email=true",
+                    "identity.signing-key.private-key-location=/run/secrets/auth-gateway-private-key.pem",
+                    "identity.signing-key.key-id=prod-main");
 
     @Test
     void bindsAppsAndClients() {
@@ -34,6 +39,12 @@ class IdentityPropertiesTest {
             assertThat(properties.clients().getFirst().clientId()).isEqualTo("job-crm");
             assertThat(properties.clients().getFirst().redirectUris())
                     .containsExactly("https://job.example.com/login/oauth2/code/auth-gateway");
+            assertThat(properties.access().allowedEmails()).containsExactly("wen@example.com", "admin@example.com");
+            assertThat(properties.access().allowedDomains()).containsExactly("liangwendev.com", "example.org");
+            assertThat(properties.access().requiresVerifiedEmail()).isTrue();
+            assertThat(properties.signingKey().privateKeyLocation())
+                    .isEqualTo("/run/secrets/auth-gateway-private-key.pem");
+            assertThat(properties.signingKey().keyId()).isEqualTo("prod-main");
         });
     }
 

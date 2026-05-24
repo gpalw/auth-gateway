@@ -1,0 +1,23 @@
+[Unit]
+Description=Auth Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=auth-gateway
+Group=auth-gateway
+WorkingDirectory=/opt/auth-gateway
+EnvironmentFile=/etc/auth-gateway/auth-gateway.env
+ExecStart=/usr/bin/java -jar /opt/auth-gateway/auth-gateway.jar
+Restart=always
+RestartSec=5
+SuccessExitStatus=143
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/auth-gateway/data
+
+[Install]
+WantedBy=multi-user.target

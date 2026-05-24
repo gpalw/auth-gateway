@@ -102,7 +102,69 @@ AUTH_GATEWAY_ISSUER=https://auth.liangwendev.com
 GOOGLE_CLIENT_ID=<google-client-id>
 GOOGLE_CLIENT_SECRET=<google-client-secret>
 SESSION_COOKIE_SECURE=true
+ALLOWED_EMAILS=your-email@example.com
+ALLOWED_DOMAINS=
+REQUIRE_VERIFIED_EMAIL=true
+AUTH_GATEWAY_JWT_PRIVATE_KEY_PATH=/etc/auth-gateway/auth-gateway-private-key.pem
+AUTH_GATEWAY_JWT_KEY_ID=auth-gateway-main
+DATABASE_URL=jdbc:postgresql://127.0.0.1:5432/auth_gateway
+DATABASE_USERNAME=auth_gateway
+DATABASE_PASSWORD=<postgres-password>
+JPA_DDL_AUTO=update
+H2_CONSOLE_ENABLED=false
 ```
+
+### Persistent JWT Signing Key
+
+Production must use a persistent RSA private key. If the key changes on every restart, downstream platforms may reject tokens issued before the restart because the JWKS has changed.
+
+Generate a PKCS#8 RSA key:
+
+```bash
+mkdir -p /etc/auth-gateway
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /etc/auth-gateway/auth-gateway-private-key.pem
+chmod 600 /etc/auth-gateway/auth-gateway-private-key.pem
+```
+
+For local Docker Compose, use:
+
+```bash
+./scripts/generate-signing-key.sh
+```
+
+Then set:
+
+```text
+AUTH_GATEWAY_JWT_PRIVATE_KEY_PATH=/etc/auth-gateway/auth-gateway-private-key.pem
+AUTH_GATEWAY_JWT_KEY_ID=auth-gateway-main
+```
+
+`AUTH_GATEWAY_JWT_PRIVATE_KEY` is also supported for environments that inject multi-line secrets directly.
+
+### Google Access Control
+
+By default, local development allows any verified Google account. For production, set at least one allowlist:
+
+```text
+ALLOWED_EMAILS=you@gmail.com,admin@example.com
+ALLOWED_DOMAINS=example.com
+REQUIRE_VERIFIED_EMAIL=true
+```
+
+If both `ALLOWED_EMAILS` and `ALLOWED_DOMAINS` are empty, any verified Google account can sign in.
+
+### PostgreSQL
+
+Use PostgreSQL in production:
+
+```text
+DATABASE_URL=jdbc:postgresql://127.0.0.1:5432/auth_gateway
+DATABASE_USERNAME=auth_gateway
+DATABASE_PASSWORD=<postgres-password>
+JPA_DDL_AUTO=update
+```
+
+H2 remains useful for local development, but do not use the file-based H2 database as the long-term production database.
 
 Example Nginx reverse proxy:
 
@@ -134,6 +196,50 @@ server {
 ```
 
 With this setup, do not expose port `8080` publicly. Let the Java app bind locally and expose only `80/443` through Nginx.
+
+The same Nginx config is also available at `deploy/nginx/auth-gateway.conf`.
+
+### Docker Compose Deployment
+
+On the VPS:
+
+```bash
+git clone https://github.com/gpalw/auth-gateway.git
+cd auth-gateway
+cp .env.production.example .env.production
+./scripts/generate-signing-key.sh
+```
+
+Edit `.env.production`, then start:
+
+```bash
+docker compose --env-file .env.production up -d --build
+```
+
+The compose file binds the Java service to `127.0.0.1:8080`, so Nginx should be the public HTTPS entry point.
+
+### Systemd Deployment
+
+If running without Docker:
+
+```bash
+sudo useradd --system --home /opt/auth-gateway --shell /usr/sbin/nologin auth-gateway
+sudo mkdir -p /opt/auth-gateway /etc/auth-gateway
+sudo cp target/auth-gateway-0.0.1-SNAPSHOT.jar /opt/auth-gateway/auth-gateway.jar
+sudo cp deploy/systemd/auth-gateway.env.example /etc/auth-gateway/auth-gateway.env
+sudo cp deploy/systemd/auth-gateway.service /etc/systemd/system/auth-gateway.service
+sudo openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /etc/auth-gateway/auth-gateway-private-key.pem
+sudo chown -R auth-gateway:auth-gateway /opt/auth-gateway /etc/auth-gateway
+sudo chmod 600 /etc/auth-gateway/auth-gateway-private-key.pem
+```
+
+Edit `/etc/auth-gateway/auth-gateway.env`, then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now auth-gateway
+sudo systemctl status auth-gateway
+```
 
 ## Built-In Local Clients
 

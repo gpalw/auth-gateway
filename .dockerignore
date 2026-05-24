@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+target
+data
+secrets
+*.log
+.env
+.env.*
+!.env.example
+!.env.production.example

@@ -2,16 +2,16 @@ spring:
   application:
     name: auth-gateway
   datasource:
-    url: jdbc:h2:file:./data/auth-gateway;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
-    username: sa
-    password:
+    url: ${DATABASE_URL:jdbc:h2:file:./data/auth-gateway;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${JPA_DDL_AUTO:update}
     open-in-view: false
   h2:
     console:
-      enabled: true
+      enabled: ${H2_CONSOLE_ENABLED:false}
       path: /h2-console
   security:
     oauth2:
@@ -38,6 +38,14 @@ server:
 
 identity:
   issuer: ${AUTH_GATEWAY_ISSUER:http://localhost:8080}
+  access:
+    allowed-emails: ${ALLOWED_EMAILS:}
+    allowed-domains: ${ALLOWED_DOMAINS:}
+    require-verified-email: ${REQUIRE_VERIFIED_EMAIL:true}
+  signing-key:
+    private-key-location: ${AUTH_GATEWAY_JWT_PRIVATE_KEY_PATH:}
+    private-key: ${AUTH_GATEWAY_JWT_PRIVATE_KEY:}
+    key-id: ${AUTH_GATEWAY_JWT_KEY_ID:}
   apps:
     - id: job-crm-local
       name: Job CRM
