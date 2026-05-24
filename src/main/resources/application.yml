@@ -27,12 +27,14 @@ spring:
 
 server:
   port: ${PORT:8080}
+  forward-headers-strategy: framework
   servlet:
     session:
       cookie:
         name: AUTH_GATEWAY_SESSION
         http-only: true
         same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}
 
 identity:
   issuer: ${AUTH_GATEWAY_ISSUER:http://localhost:8080}

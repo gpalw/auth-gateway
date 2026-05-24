@@ -70,6 +70,71 @@ AUTH_GATEWAY_ISSUER
 https://auth.liangwendev.com
 ```
 
+## VPS Deployment Shape
+
+Prefer a dedicated auth subdomain:
+
+```text
+https://auth.liangwendev.com
+```
+
+Keep `https://liangwendev.com` for the CV/home page. Add a normal link or button from the CV page to `https://auth.liangwendev.com/` if you want an entry point.
+
+Avoid mounting the gateway at `https://liangwendev.com/login` for production OIDC. Path-mounted auth servers make issuer URLs, discovery metadata, callback URLs, and downstream app configuration easier to misconfigure.
+
+DNS:
+
+```text
+auth.liangwendev.com A <your-vps-public-ip>
+```
+
+Google OAuth authorized redirect URI:
+
+```text
+https://auth.liangwendev.com/login/oauth2/code/google
+```
+
+Runtime environment:
+
+```text
+PORT=8080
+AUTH_GATEWAY_ISSUER=https://auth.liangwendev.com
+GOOGLE_CLIENT_ID=<google-client-id>
+GOOGLE_CLIENT_SECRET=<google-client-secret>
+SESSION_COOKIE_SECURE=true
+```
+
+Example Nginx reverse proxy:
+
+```nginx
+server {
+    listen 80;
+    server_name auth.liangwendev.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name auth.liangwendev.com;
+
+    ssl_certificate /etc/letsencrypt/live/auth.liangwendev.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/auth.liangwendev.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+    }
+}
+```
+
+With this setup, do not expose port `8080` publicly. Let the Java app bind locally and expose only `80/443` through Nginx.
+
 ## Built-In Local Clients
 
 The default config includes two local OIDC clients:
@@ -147,4 +212,3 @@ Avoid using Google's `sub` as the platform-wide user id. Google identity is an e
 ## Secrets
 
 Do not commit real Google client credentials or platform client secrets. Use deployment environment variables or the platform's secret manager.
-
