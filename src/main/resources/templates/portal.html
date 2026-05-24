@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auth Gateway</title>
+  <link rel="stylesheet" th:href="@{/styles.css}">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Identity Portal</p>
+        <h1>Auth Gateway</h1>
+      </div>
+      <section class="user-panel" aria-label="Current user">
+        <img th:if="${avatarUrl != ''}" th:src="${avatarUrl}" alt="" class="avatar">
+        <div class="user-copy">
+          <strong th:text="${displayName}">Wen Liang</strong>
+          <span th:text="${email}">wen@example.com</span>
+        </div>
+        <form th:action="@{/logout}" method="post">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <button type="submit">Sign out</button>
+        </form>
+      </section>
+    </header>
+
+    <section class="apps" aria-label="Applications">
+      <a class="app-card" th:each="app : ${apps}" th:href="${app.url}">
+        <span class="app-icon" th:text="${#strings.substring(app.name, 0, 1)}">J</span>
+        <span class="app-copy">
+          <strong th:text="${app.name}">Job CRM</strong>
+          <span th:text="${app.description}">Application pipeline</span>
+        </span>
+      </a>
+    </section>
+  </main>
+</body>
+</html>
