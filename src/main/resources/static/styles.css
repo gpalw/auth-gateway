@@ -132,6 +132,108 @@ button:hover {
   font-weight: 800;
 }
 
+.admin-shell {
+  width: min(1400px, calc(100vw - 32px));
+}
+
+.admin-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 24px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.user-card,
+.notice,
+.admin-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.user-card {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 14px;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.notice {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  color: var(--warning);
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-table th,
+.admin-table td {
+  max-width: 320px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-table th {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.admin-table small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-table ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.admin-table a {
+  color: var(--accent);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.pill.strong {
+  background: var(--ink);
+  color: var(--surface);
+}
+
 @media (max-width: 720px) {
   .shell {
     width: min(100% - 20px, 1120px);
@@ -139,6 +241,10 @@ button:hover {
   }
 
   .topbar {
+    display: grid;
+  }
+
+  .admin-hero {
     display: grid;
   }
 

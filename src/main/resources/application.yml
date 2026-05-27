@@ -36,6 +36,14 @@ server:
         same-site: lax
         secure: ${SESSION_COOKIE_SECURE:false}
 
+admin:
+  enabled: ${ADMIN_ENABLED:false}
+  inventory:
+    docker-enabled: ${ADMIN_DOCKER_ENABLED:true}
+    systemd-enabled: ${ADMIN_SYSTEMD_ENABLED:true}
+    ports-enabled: ${ADMIN_PORTS_ENABLED:true}
+    services: []
+
 identity:
   issuer: ${AUTH_GATEWAY_ISSUER:http://localhost:8080}
   access:

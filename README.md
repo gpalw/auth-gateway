@@ -112,6 +112,10 @@ DATABASE_USERNAME=auth_gateway
 DATABASE_PASSWORD=<postgres-password>
 JPA_DDL_AUTO=update
 H2_CONSOLE_ENABLED=false
+ADMIN_ENABLED=true
+ADMIN_DOCKER_ENABLED=true
+ADMIN_SYSTEMD_ENABLED=true
+ADMIN_PORTS_ENABLED=true
 ```
 
 ### Persistent JWT Signing Key
@@ -198,6 +202,53 @@ server {
 With this setup, do not expose port `8080` publicly. Let the Java app bind locally and expose only `80/443` through Nginx.
 
 The same Nginx config is also available at `deploy/nginx/auth-gateway.conf`.
+
+The Nginx config intentionally returns `404` for `/admin` so the read-only inventory UI is not exposed on the public internet.
+
+### SSH-Only Admin Inventory
+
+The admin UI turns server commands into a read-only service list. It does not start, stop, restart, or mutate services.
+
+Enable it on the VPS:
+
+```text
+ADMIN_ENABLED=true
+ADMIN_DOCKER_ENABLED=true
+ADMIN_SYSTEMD_ENABLED=true
+ADMIN_PORTS_ENABLED=true
+```
+
+Then open it through an SSH tunnel:
+
+```bash
+ssh -L 9090:127.0.0.1:8080 root@your-vps
+```
+
+Open:
+
+```text
+http://localhost:9090/admin/services
+```
+
+The page combines:
+
+- configured portal apps from `identity.apps`,
+- OIDC clients from `identity.clients`,
+- Docker containers from `docker ps`,
+- running systemd units from `systemctl list-units`,
+- listening TCP ports from `ss -ltnpH`.
+
+If Docker, systemd, or `ss` is unavailable or permission-limited, the page still loads and shows the collector warning.
+
+You can add manual services with indexed environment variables:
+
+```text
+ADMIN_INVENTORY_SERVICES_0_ID=cv-home
+ADMIN_INVENTORY_SERVICES_0_NAME=CV Home
+ADMIN_INVENTORY_SERVICES_0_URL=https://liangwendev.com
+ADMIN_INVENTORY_SERVICES_0_PORT=443
+ADMIN_INVENTORY_SERVICES_0_NOTES=public homepage
+```
 
 ### Docker Compose Deployment
 

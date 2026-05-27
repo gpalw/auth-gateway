@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Service Inventory</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="shell admin-shell">
+    <section class="hero admin-hero">
+        <div>
+            <p class="eyebrow">Auth Gateway Admin</p>
+            <h1>Service Inventory</h1>
+            <p class="muted">Read-only view of configured apps, OIDC clients, Docker containers, systemd units, and listening ports.</p>
+        </div>
+        <div class="user-card">
+            <span class="label">Checked</span>
+            <strong th:text="${inventory.checkedAt()}">now</strong>
+        </div>
+    </section>
+
+    <section class="notice" th:if="${!inventory.errors().isEmpty()}">
+        <strong>Collector warnings</strong>
+        <ul>
+            <li th:each="error : ${inventory.errors()}" th:text="${error}">collector error</li>
+        </ul>
+    </section>
+
+    <section class="admin-table-wrap">
+        <table class="admin-table">
+            <thead>
+            <tr>
+                <th>Service</th>
+                <th>Source</th>
+                <th>Status</th>
+                <th>Address</th>
+                <th>Port</th>
+                <th>Auth</th>
+                <th>OIDC Client</th>
+                <th>URL / Redirects</th>
+                <th>Notes</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="item : ${inventory.items()}">
+                <td>
+                    <strong th:text="${item.name()}">service</strong>
+                    <small th:if="${item.raw()}" th:text="${item.raw()}">raw</small>
+                </td>
+                <td><span class="pill" th:text="${item.source()}">CONFIG</span></td>
+                <td><span class="pill" th:text="${item.status()}">RUNNING</span></td>
+                <td th:text="${item.listenAddress()}">127.0.0.1</td>
+                <td th:text="${item.port()}">8080</td>
+                <td><span class="pill strong" th:text="${item.authType()}">SSO</span></td>
+                <td th:text="${item.oidcClientId()}">job-crm-local</td>
+                <td>
+                    <a th:if="${item.url()}" th:href="${item.url()}" th:text="${item.url()}">url</a>
+                    <ul th:if="${!item.redirectUris().isEmpty()}">
+                        <li th:each="uri : ${item.redirectUris()}" th:text="${uri}">redirect</li>
+                    </ul>
+                </td>
+                <td th:text="${item.description()}">notes</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+</body>
+</html>

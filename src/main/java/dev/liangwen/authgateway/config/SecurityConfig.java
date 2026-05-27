@@ -65,7 +65,7 @@ public class SecurityConfig {
             OAuth2UserService<OidcUserRequest, OidcUser> gatewayOidcUserService) throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/styles.css", "/error").permitAll()
+                        .requestMatchers("/actuator/health", "/styles.css", "/admin/**", "/error").permitAll()
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2.userInfoEndpoint(userInfo ->
                         userInfo.oidcUserService(gatewayOidcUserService)))
