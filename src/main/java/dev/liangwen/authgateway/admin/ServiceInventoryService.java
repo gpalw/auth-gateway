@@ -1,28 +1,26 @@
 package dev.liangwen.authgateway.admin;
 
-import dev.liangwen.authgateway.config.IdentityProperties;
+import dev.liangwen.authgateway.platform.PlatformRegistration;
+import dev.liangwen.authgateway.platform.PlatformRegistrationService;
 import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class ServiceInventoryService {
 
-    private final IdentityProperties identity;
+    private final PlatformRegistrationService platforms;
     private final AdminProperties admin;
     private final List<ServiceCollector> collectors;
 
     public ServiceInventoryService(
-            IdentityProperties identity,
+            PlatformRegistrationService platforms,
             AdminProperties admin,
             List<ServiceCollector> collectors) {
-        this.identity = identity;
+        this.platforms = platforms;
         this.admin = admin;
         this.collectors = List.copyOf(collectors);
     }
@@ -30,10 +28,8 @@ public class ServiceInventoryService {
     public ServiceInventory inventory() {
         List<ServiceInventoryItem> items = new ArrayList<>();
         List<String> errors = new ArrayList<>();
-        Map<String, IdentityProperties.Client> clientsById = identity.clients().stream()
-                .collect(Collectors.toMap(IdentityProperties.Client::clientId, Function.identity(), (first, second) -> first));
 
-        identity.enabledApps().forEach(app -> items.add(configuredApp(app, clientsById.get(app.id()))));
+        platforms.allPlatforms().forEach(platform -> items.add(configuredApp(platform)));
         admin.inventory().services().forEach(service -> items.add(manualService(service)));
 
         for (ServiceCollector collector : collectors) {
@@ -49,21 +45,19 @@ public class ServiceInventoryService {
         return new ServiceInventory(Instant.now(), items, errors);
     }
 
-    private static ServiceInventoryItem configuredApp(
-            IdentityProperties.App app,
-            IdentityProperties.Client client) {
+    private static ServiceInventoryItem configuredApp(PlatformRegistration platform) {
         return new ServiceInventoryItem(
-                "config:" + app.id(),
-                app.name(),
+                "platform:" + platform.clientId(),
+                platform.name(),
                 ServiceSource.CONFIG,
                 ServiceStatus.UNKNOWN,
-                app.url(),
-                host(app.url()),
-                port(app.url()),
-                client == null ? AuthType.PLAIN : AuthType.SSO,
-                client == null ? "" : client.clientId(),
-                client == null ? List.of() : client.redirectUris(),
-                app.description(),
+                platform.homeUrl(),
+                host(platform.homeUrl()),
+                port(platform.homeUrl()),
+                platform.enabled() ? AuthType.SSO : AuthType.UNKNOWN,
+                platform.clientId(),
+                platform.redirectUris(),
+                platform.description(),
                 "");
     }
 

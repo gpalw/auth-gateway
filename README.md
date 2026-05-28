@@ -10,6 +10,7 @@ Java identity gateway for the user's platforms. It centralizes Google login and 
 - Provides a portal page at `/`.
 - Exposes `/api/me` for the current user.
 - Acts as an OpenID Connect provider for platforms such as Job CRM and Interview Intelligence.
+- Stores downstream platform/OIDC client registrations in the database and manages them from `/admin/platforms`.
 
 It is not a full traffic API gateway. Business apps should still serve their own UI and APIs.
 
@@ -221,6 +222,10 @@ GitHub Secrets and the rollback procedure.
 
 The admin UI turns server commands into a read-only service list. It does not start, stop, restart, or mutate services.
 
+The platform registry at `/admin/platforms` is the place to add or edit downstream apps that use this gateway for login. Existing platform URLs stay as normal entry points. If a platform needs login, it redirects users to this gateway through OIDC; registering it here gives the gateway the client id, client secret, home URL, redirect URIs, logout redirect URIs, and enabled/disabled state it needs.
+
+`identity.apps` and `identity.clients` are now startup seeds. They keep local development and first deployment easy, but after the database has a platform row, changes should be made through `/admin/platforms` instead of editing application config.
+
 Enable it on the VPS:
 
 ```text
@@ -233,7 +238,7 @@ ADMIN_PORTS_ENABLED=true
 Then open it through an SSH tunnel:
 
 ```bash
-ssh -L 9090:127.0.0.1:8080 root@your-vps
+ssh -L 9090:127.0.0.1:<java-service-port> root@your-vps
 ```
 
 Open:
@@ -244,8 +249,8 @@ http://localhost:9090/admin/services
 
 The page combines:
 
-- configured portal apps from `identity.apps`,
-- OIDC clients from `identity.clients`,
+- registered platforms from the database,
+- manual service entries from `admin.inventory.services`,
 - Docker containers from `docker ps`,
 - running systemd units from `systemctl list-units`,
 - listening TCP ports from `ss -ltnpH`.
@@ -306,21 +311,23 @@ sudo systemctl status auth-gateway
 
 ## Built-In Local Clients
 
-The default config includes two local OIDC clients:
+The default config seeds three local OIDC clients on first startup:
 
 | Client | Client ID | Redirect URI |
 | --- | --- | --- |
 | Job CRM | `job-crm-local` | `http://localhost:3000/login/oauth2/code/auth-gateway` |
 | Interview Intelligence | `interview-local` | `http://localhost:3000/login/oauth2/code/auth-gateway` |
+| Online Billing | `online-billing-local` | `http://localhost:5173/login/oauth2/code/auth-gateway` |
 
 Client secrets are read from:
 
 ```text
 JOB_CRM_CLIENT_SECRET
 INTERVIEW_CLIENT_SECRET
+ONLINE_BILLING_CLIENT_SECRET
 ```
 
-Local fallback values exist only so the app can boot without real secrets. Deployment should set real secrets.
+Local fallback values exist only so the app can boot without real secrets. Deployment should set real secrets. After the rows exist in the database, `/admin/platforms` is the source of truth for platform onboarding.
 
 ## Downstream Spring Boot App
 

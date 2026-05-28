@@ -180,6 +180,92 @@ button:hover {
   overflow-x: auto;
 }
 
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.admin-form h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.admin-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-form input,
+.admin-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 11px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.admin-form textarea {
+  resize: vertical;
+}
+
+.admin-form input[readonly] {
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.check-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.check-row input {
+  width: auto;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-error {
+  margin: 0;
+  border: 1px solid #d69a58;
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--warning);
+  background: #fff7ed;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.text-link {
+  color: var(--accent);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
 .admin-table {
   width: 100%;
   border-collapse: collapse;
@@ -246,6 +332,10 @@ button:hover {
 
   .admin-hero {
     display: grid;
+  }
+
+  .admin-grid {
+    grid-template-columns: 1fr;
   }
 
   .user-panel {

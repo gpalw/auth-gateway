@@ -1,6 +1,6 @@
 package dev.liangwen.authgateway.web;
 
-import dev.liangwen.authgateway.config.IdentityProperties;
+import dev.liangwen.authgateway.platform.PlatformRegistrationService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -12,15 +12,15 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class PortalController {
 
-    private final IdentityProperties identity;
+    private final PlatformRegistrationService platforms;
 
-    public PortalController(IdentityProperties identity) {
-        this.identity = identity;
+    public PortalController(PlatformRegistrationService platforms) {
+        this.platforms = platforms;
     }
 
     @GetMapping("/")
     String portal(@AuthenticationPrincipal OidcUser principal, Model model) {
-        List<AppRegistration> apps = identity.enabledApps().stream()
+        List<AppRegistration> apps = platforms.enabledPlatforms().stream()
                 .map(AppRegistration::from)
                 .toList();
         Map<String, Object> claims = principal.getClaims();

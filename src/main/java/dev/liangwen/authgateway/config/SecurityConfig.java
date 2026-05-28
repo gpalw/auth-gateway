@@ -4,10 +4,11 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import dev.liangwen.authgateway.platform.DatabaseRegisteredClientRepository;
+import dev.liangwen.authgateway.platform.PlatformRegistrationRepository;
 import dev.liangwen.authgateway.user.GatewayOidcUser;
 import dev.liangwen.authgateway.user.GatewayUser;
 import dev.liangwen.authgateway.user.UserIdentityService;
-import java.util.UUID;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,16 +22,10 @@ import org.springframework.security.config.annotation.web.configurers.oauth2.ser
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
-import org.springframework.security.oauth2.core.AuthorizationGrantType;
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
-import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
-import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -104,10 +99,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    RegisteredClientRepository registeredClientRepository(IdentityProperties properties) {
-        return new InMemoryRegisteredClientRepository(properties.clients().stream()
-                .map(SecurityConfig::registeredClient)
-                .toList());
+    RegisteredClientRepository registeredClientRepository(PlatformRegistrationRepository registrations) {
+        return new DatabaseRegisteredClientRepository(registrations);
     }
 
     @Bean
@@ -146,20 +139,4 @@ public class SecurityConfig {
         };
     }
 
-    private static RegisteredClient registeredClient(IdentityProperties.Client client) {
-        RegisteredClient.Builder builder = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId(client.clientId())
-                .clientSecret("{noop}" + client.clientSecret())
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .scope(OidcScopes.OPENID)
-                .scope(OidcScopes.PROFILE)
-                .scope(OidcScopes.EMAIL)
-                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build());
-
-        client.redirectUris().forEach(builder::redirectUri);
-        client.postLogoutRedirectUris().forEach(builder::postLogoutRedirectUri);
-        return builder.build();
-    }
 }

@@ -3,6 +3,8 @@ package dev.liangwen.authgateway.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.liangwen.authgateway.config.IdentityProperties;
+import dev.liangwen.authgateway.platform.InMemoryPlatformRegistrationRepository;
+import dev.liangwen.authgateway.platform.PlatformRegistrationService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +27,10 @@ class ServiceInventoryServiceTest {
                         List.of("https://jobs.example.com"))),
                 null,
                 null);
+        PlatformRegistrationService platforms = new PlatformRegistrationService(
+                new InMemoryPlatformRegistrationRepository(),
+                identity);
+        platforms.seedConfiguredPlatforms();
         AdminProperties admin = new AdminProperties(true, new AdminProperties.Inventory(
                 false,
                 false,
@@ -45,7 +51,7 @@ class ServiceInventoryServiceTest {
                 "LISTEN ..."));
 
         ServiceInventoryService service = new ServiceInventoryService(
-                identity,
+                platforms,
                 admin,
                 List.of(runtimePorts));
 
