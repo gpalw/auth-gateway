@@ -65,6 +65,11 @@ identity:
       description: Recording review and interview practice
       url: ${INTERVIEW_URL:http://localhost:3000/}
       enabled: true
+    - id: online-billing-local
+      name: Online Billing
+      description: Personal finance and multi-currency billing
+      url: ${ONLINE_BILLING_URL:http://localhost:5173/}
+      enabled: true
   clients:
     - client-id: job-crm-local
       client-secret: ${JOB_CRM_CLIENT_SECRET:dev-job-crm-secret}
@@ -78,6 +83,12 @@ identity:
         - ${INTERVIEW_REDIRECT_URI:http://localhost:3000/login/oauth2/code/auth-gateway}
       post-logout-redirect-uris:
         - ${INTERVIEW_LOGOUT_REDIRECT_URI:http://localhost:3000/}
+    - client-id: online-billing-local
+      client-secret: ${ONLINE_BILLING_CLIENT_SECRET:dev-online-billing-secret}
+      redirect-uris:
+        - ${ONLINE_BILLING_REDIRECT_URI:http://localhost:5173/login/oauth2/code/auth-gateway}
+      post-logout-redirect-uris:
+        - ${ONLINE_BILLING_LOGOUT_REDIRECT_URI:http://localhost:5173/}
 
 management:
   endpoints:
