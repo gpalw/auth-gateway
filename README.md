@@ -205,6 +205,18 @@ The same Nginx config is also available at `deploy/nginx/auth-gateway.conf`.
 
 The Nginx config intentionally returns `404` for `/admin` so the read-only inventory UI is not exposed on the public internet.
 
+## CI/CD Deployment
+
+This repository includes a GitHub Actions workflow at `.github/workflows/ci-cd.yml`.
+Pushes to `main` run tests, package the Spring Boot jar, SSH to the VPS, replace
+`/opt/auth-gateway/auth-gateway.jar`, restart `auth-gateway.service`, and verify
+`/actuator/health`. If the new jar does not become healthy, the deploy script
+restores the previous jar and restarts the service again.
+
+Runtime secrets stay on the server in `/etc/auth-gateway/auth-gateway.env`; the
+workflow only needs SSH deployment secrets. See `docs/ci-cd.md` for the required
+GitHub Secrets and the rollback procedure.
+
 ### SSH-Only Admin Inventory
 
 The admin UI turns server commands into a read-only service list. It does not start, stop, restart, or mutate services.

@@ -1,0 +1,103 @@
+name: Auth Gateway CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: auth-gateway-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run tests
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B test
+
+      - name: Package application
+        run: |
+          ./mvnw -B -DskipTests package
+          mkdir -p dist
+          jar_path="$(find target -maxdepth 1 -type f -name 'auth-gateway-*.jar' ! -name '*.original' | sort | head -n 1)"
+          test -n "$jar_path"
+          cp "$jar_path" dist/auth-gateway.jar
+
+      - name: Upload deployable jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-gateway-jar
+          path: dist/auth-gateway.jar
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - name: Check out deployment scripts
+        uses: actions/checkout@v4
+
+      - name: Download packaged jar
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-gateway-jar
+          path: dist
+
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.AUTH_GATEWAY_VPS_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.AUTH_GATEWAY_VPS_HOST }}
+          DEPLOY_PORT: ${{ secrets.AUTH_GATEWAY_VPS_PORT || '22' }}
+        run: |
+          test -n "$DEPLOY_KEY"
+          test -n "$DEPLOY_HOST"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/auth_gateway_deploy
+          chmod 600 ~/.ssh/auth_gateway_deploy
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copy release to VPS
+        env:
+          DEPLOY_HOST: ${{ secrets.AUTH_GATEWAY_VPS_HOST }}
+          DEPLOY_USER: ${{ secrets.AUTH_GATEWAY_VPS_USER }}
+          DEPLOY_PORT: ${{ secrets.AUTH_GATEWAY_VPS_PORT || '22' }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          remote_tmp="/tmp/auth-gateway-${GITHUB_SHA}"
+          ssh -p "$DEPLOY_PORT" -i ~/.ssh/auth_gateway_deploy "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$remote_tmp'"
+          scp -P "$DEPLOY_PORT" -i ~/.ssh/auth_gateway_deploy dist/auth-gateway.jar "$DEPLOY_USER@$DEPLOY_HOST:$remote_tmp/auth-gateway.jar"
+          scp -P "$DEPLOY_PORT" -i ~/.ssh/auth_gateway_deploy scripts/deploy-systemd.sh "$DEPLOY_USER@$DEPLOY_HOST:$remote_tmp/deploy-systemd.sh"
+
+      - name: Restart service and verify health
+        env:
+          DEPLOY_HOST: ${{ secrets.AUTH_GATEWAY_VPS_HOST }}
+          DEPLOY_USER: ${{ secrets.AUTH_GATEWAY_VPS_USER }}
+          DEPLOY_PORT: ${{ secrets.AUTH_GATEWAY_VPS_PORT || '22' }}
+        run: |
+          remote_tmp="/tmp/auth-gateway-${GITHUB_SHA}"
+          ssh -p "$DEPLOY_PORT" -i ~/.ssh/auth_gateway_deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo bash '$remote_tmp/deploy-systemd.sh' '$remote_tmp/auth-gateway.jar' '${GITHUB_SHA}' '${GITHUB_RUN_ID}'"
