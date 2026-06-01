@@ -49,6 +49,7 @@ class AdminPlatformsControllerTest {
         mockMvc.perform(get("/admin/platforms"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Platform Registry")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Launch URL")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Job CRM")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("https://tools.example.com/job/")));
     }

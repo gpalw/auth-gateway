@@ -90,7 +90,7 @@ public class PlatformRegistrationService {
                 valueOrFallback(form.getClientSecret(), fallbackSecret),
                 valueOrFallback(form.getName(), clientId),
                 valueOrFallback(form.getDescription(), ""),
-                requireText(form.getHomeUrl(), "Home URL is required"),
+                requireText(form.getHomeUrl(), "Launch URL is required"),
                 splitLines(form.getRedirectUrisText()),
                 splitLines(form.getPostLogoutRedirectUrisText()),
                 form.isEnabled());

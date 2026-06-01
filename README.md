@@ -222,7 +222,7 @@ GitHub Secrets and the rollback procedure.
 
 The admin UI turns server commands into a read-only service list. It does not start, stop, restart, or mutate services.
 
-The platform registry at `/admin/platforms` is the place to add or edit downstream apps that use this gateway for login. Existing platform URLs stay as normal entry points. If a platform needs login, it redirects users to this gateway through OIDC; registering it here gives the gateway the client id, client secret, home URL, redirect URIs, logout redirect URIs, and enabled/disabled state it needs.
+The platform registry at `/admin/platforms` is the place to add or edit downstream apps that use this gateway for login. Existing platform URLs stay as normal entry points. If a platform needs login, set its launch URL to the downstream app's own auth-start endpoint, such as `/job/api/auth/login`, so opening it from the portal completes SSO. Registering it here gives the gateway the client id, client secret, launch URL, redirect URIs, logout redirect URIs, and enabled/disabled state it needs.
 
 `identity.apps` and `identity.clients` are now startup seeds. They keep local development and first deployment easy, but after the database has a platform row, changes should be made through `/admin/platforms` instead of editing application config.
 
@@ -315,7 +315,7 @@ The default config seeds three local OIDC clients on first startup:
 
 | Client | Client ID | Redirect URI |
 | --- | --- | --- |
-| Job CRM | `job-crm-local` | `http://localhost:3000/login/oauth2/code/auth-gateway` |
+| Job CRM | `job-crm-local` | `http://localhost:19086/job/login/oauth2/code/auth-gateway` |
 | Interview Intelligence | `interview-local` | `http://localhost:3000/login/oauth2/code/auth-gateway` |
 | Online Billing | `online-billing-local` | `http://localhost:5173/login/oauth2/code/auth-gateway` |
 

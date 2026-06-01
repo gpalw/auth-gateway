@@ -1,8 +1,10 @@
 package dev.liangwen.authgateway.web;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -55,5 +57,18 @@ class PortalControllerTest {
                 .andExpect(content().string(containsString("https://job.example.com")))
                 .andExpect(content().string(containsString("Wen Liang")))
                 .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Disabled App"))));
+    }
+
+    @Test
+    void logoutStopsOnPublicSignedOutPage() throws Exception {
+        mockMvc.perform(post("/logout")
+                        .with(csrf())
+                        .with(oidcLogin()))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/signed-out"));
+
+        mockMvc.perform(get("/signed-out"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Signed out")));
     }
 }

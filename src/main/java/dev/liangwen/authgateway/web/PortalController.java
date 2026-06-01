@@ -32,6 +32,11 @@ public class PortalController {
         return "portal";
     }
 
+    @GetMapping("/signed-out")
+    String signedOut() {
+        return "signed-out";
+    }
+
     private static String claim(Map<String, Object> claims, String key, String fallback) {
         Object value = claims.get(key);
         return value == null ? fallback : value.toString();

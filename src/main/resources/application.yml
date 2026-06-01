@@ -58,7 +58,7 @@ identity:
     - id: job-crm-local
       name: Job CRM
       description: Application pipeline and interview intelligence
-      url: ${JOB_CRM_URL:http://localhost:3000/job/}
+      url: ${JOB_CRM_URL:http://localhost:19086/job/api/auth/login}
       enabled: true
     - id: interview-local
       name: Interview Intelligence
@@ -74,9 +74,9 @@ identity:
     - client-id: job-crm-local
       client-secret: ${JOB_CRM_CLIENT_SECRET:dev-job-crm-secret}
       redirect-uris:
-        - ${JOB_CRM_REDIRECT_URI:http://localhost:3000/login/oauth2/code/auth-gateway}
+        - ${JOB_CRM_REDIRECT_URI:http://localhost:19086/job/login/oauth2/code/auth-gateway}
       post-logout-redirect-uris:
-        - ${JOB_CRM_LOGOUT_REDIRECT_URI:http://localhost:3000/job/}
+        - ${JOB_CRM_LOGOUT_REDIRECT_URI:http://localhost:19086/job/}
     - client-id: interview-local
       client-secret: ${INTERVIEW_CLIENT_SECRET:dev-interview-secret}
       redirect-uris:

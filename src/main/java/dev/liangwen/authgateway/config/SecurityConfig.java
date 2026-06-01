@@ -60,7 +60,8 @@ public class SecurityConfig {
             OAuth2UserService<OidcUserRequest, OidcUser> gatewayOidcUserService) throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/styles.css", "/admin/**", "/error").permitAll()
+                        .requestMatchers("/actuator/health", "/styles.css", "/admin/**", "/signed-out", "/error")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 -> oauth2.userInfoEndpoint(userInfo ->
                         userInfo.oidcUserService(gatewayOidcUserService)))
@@ -71,7 +72,7 @@ public class SecurityConfig {
                         .defaultAuthenticationEntryPointFor(
                                 new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/google"),
                                 AnyRequestMatcher.INSTANCE))
-                .logout(logout -> logout.logoutSuccessUrl("/"));
+                .logout(logout -> logout.logoutSuccessUrl("/signed-out"));
 
         return http.build();
     }
