@@ -62,7 +62,10 @@ public class DatabaseRegisteredClientRepository implements RegisteredClientRepos
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope(OidcScopes.EMAIL)
-                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build());
+                .clientSettings(ClientSettings.builder()
+                        .requireAuthorizationConsent(false)
+                        .requireProofKey(false)
+                        .build());
 
         registration.redirectUris().forEach(builder::redirectUri);
         registration.postLogoutRedirectUris().forEach(builder::postLogoutRedirectUri);

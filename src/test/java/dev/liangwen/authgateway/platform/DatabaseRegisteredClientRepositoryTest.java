@@ -37,6 +37,7 @@ class DatabaseRegisteredClientRepositoryTest {
                 .containsExactly("https://tools.example.com/billing/login/oauth2/code/auth-gateway");
         assertThat(client.getPostLogoutRedirectUris()).containsExactly("https://tools.example.com/billing/");
         assertThat(client.getScopes()).contains(OidcScopes.OPENID, OidcScopes.PROFILE, OidcScopes.EMAIL);
+        assertThat(client.getClientSettings().isRequireProofKey()).isFalse();
     }
 
     @Test
