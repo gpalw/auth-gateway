@@ -9,16 +9,23 @@ import dev.liangwen.authgateway.platform.PlatformRegistrationRepository;
 import dev.liangwen.authgateway.user.GatewayOidcUser;
 import dev.liangwen.authgateway.user.GatewayUser;
 import dev.liangwen.authgateway.user.UserIdentityService;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.config.annotation.web.configurers.oauth2.server.authorization.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
@@ -28,11 +35,16 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.AnyRequestMatcher;
+import org.springframework.web.filter.OncePerRequestFilter;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(IdentityProperties.class)
@@ -48,6 +60,8 @@ public class SecurityConfig {
                 .securityMatcher(authorizationServerConfigurer.getEndpointsMatcher())
                 .with(authorizationServerConfigurer, authorizationServer ->
                         authorizationServer.oidc(Customizer.withDefaults()))
+                .addFilterAfter(new AuthorizationEndpointLoginRedirectFilter(), SecurityContextHolderFilter.class)
+                .anonymous(anonymous -> anonymous.disable())
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(
                         new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/google")));
 
@@ -138,6 +152,34 @@ public class SecurityConfig {
                 }
             }
         };
+    }
+
+    private static final class AuthorizationEndpointLoginRedirectFilter extends OncePerRequestFilter {
+        private final RequestCache requestCache = new HttpSessionRequestCache();
+
+        @Override
+        protected void doFilterInternal(
+                HttpServletRequest request,
+                HttpServletResponse response,
+                FilterChain filterChain) throws ServletException, IOException {
+            if (isAuthorizeRequest(request) && !isAuthenticated()) {
+                requestCache.saveRequest(request, response);
+                response.sendRedirect(request.getContextPath() + "/oauth2/authorization/google");
+                return;
+            }
+            filterChain.doFilter(request, response);
+        }
+
+        private static boolean isAuthorizeRequest(HttpServletRequest request) {
+            return "GET".equals(request.getMethod()) && "/oauth2/authorize".equals(request.getRequestURI());
+        }
+
+        private static boolean isAuthenticated() {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            return authentication != null
+                    && authentication.isAuthenticated()
+                    && !(authentication instanceof AnonymousAuthenticationToken);
+        }
     }
 
 }
