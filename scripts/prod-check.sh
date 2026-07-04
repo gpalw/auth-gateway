@@ -3,7 +3,7 @@ set -euo pipefail
 
 ENV_FILE="${ENV_FILE:-/etc/auth-gateway/auth-gateway.env}"
 SERVICE_NAME="${SERVICE_NAME:-auth-gateway.service}"
-NGINX_CONFIG="${NGINX_CONFIG:-/etc/nginx/sites-enabled/auth.liangwendev.com.conf}"
+NGINX_CONFIG="${NGINX_CONFIG:-}"
 
 failures=0
 
@@ -129,11 +129,26 @@ check_env_invariants() {
 }
 
 check_nginx_admin_block() {
-  if [ -f "$NGINX_CONFIG" ] && grep -q 'location \^~ /admin' "$NGINX_CONFIG" && grep -q 'return 404' "$NGINX_CONFIG"; then
-    pass "Nginx blocks public admin path"
-  else
-    fail "Nginx admin 404 block was not found"
+  local config
+  for config in $(nginx_config_candidates); do
+    if [ -f "$config" ] && grep -q 'location \^~ /admin' "$config" && grep -q 'return 404' "$config"; then
+      pass "Nginx blocks public admin path"
+      return
+    fi
+  done
+
+  fail "Nginx admin 404 block was not found"
+}
+
+nginx_config_candidates() {
+  if [ -n "$NGINX_CONFIG" ]; then
+    printf '%s\n' "$NGINX_CONFIG"
+    return
   fi
+
+  printf '%s\n' \
+    /etc/nginx/sites-enabled/auth.liangwendev.com.conf \
+    /etc/nginx/conf.d/auth.liangwendev.com.conf
 }
 
 check_platform_registration_hint() {

@@ -22,6 +22,15 @@ class ProdCheckScriptTest {
     }
 
     @Test
+    void scriptChecksLikelyNginxConfigLocations() throws Exception {
+        String script = Files.readString(Path.of("scripts/prod-check.sh"));
+
+        assertThat(script)
+                .contains("/etc/nginx/sites-enabled/auth.liangwendev.com.conf")
+                .contains("/etc/nginx/conf.d/auth.liangwendev.com.conf");
+    }
+
+    @Test
     void scriptHasValidBashSyntaxWhenBashIsAvailable() throws Exception {
         assumeTrue(hasBash());
 
