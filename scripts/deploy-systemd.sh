@@ -9,6 +9,7 @@ fi
 JAR_SOURCE="${1:?Usage: deploy-systemd.sh <jar-path> [revision] [run-id]}"
 REVISION="${2:-manual-$(date -u +%Y%m%dT%H%M%SZ)}"
 RUN_ID="${3:-manual}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 APP_NAME="${APP_NAME:-auth-gateway}"
 SERVICE_NAME="${SERVICE_NAME:-auth-gateway.service}"
@@ -83,6 +84,14 @@ echo "Health URL: $HEALTH_URL"
 install -d -m 0755 "$INSTALL_DIR" "$RELEASES_DIR" "$BACKUPS_DIR"
 install -d -m 0755 "$RELEASE_DIR" "$BACKUP_DIR"
 install -m 0644 "$JAR_SOURCE" "$RELEASE_DIR/auth-gateway.jar"
+
+if [ -f "$SCRIPT_DIR/prod-check.sh" ]; then
+  install -m 0755 "$SCRIPT_DIR/prod-check.sh" "$RELEASE_DIR/prod-check.sh"
+fi
+
+if [ -f "$SCRIPT_DIR/h2-to-postgres-dry-run.sh" ]; then
+  install -m 0755 "$SCRIPT_DIR/h2-to-postgres-dry-run.sh" "$RELEASE_DIR/h2-to-postgres-dry-run.sh"
+fi
 
 cat > "$RELEASE_DIR/deploy-info.env" <<EOF
 APP_NAME=$APP_NAME
