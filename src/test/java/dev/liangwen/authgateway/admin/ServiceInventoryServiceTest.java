@@ -31,16 +31,19 @@ class ServiceInventoryServiceTest {
                 new InMemoryPlatformRegistrationRepository(),
                 identity);
         platforms.seedConfiguredPlatforms();
-        AdminProperties admin = new AdminProperties(true, new AdminProperties.Inventory(
-                false,
-                false,
+        AdminProperties admin = new AdminProperties(
                 true,
-                List.of(new AdminProperties.ManualService(
-                        "cv-home",
-                        "CV Home",
-                        "https://liangwendev.com",
-                        "443",
-                        "public homepage"))));
+                new AdminProperties.Inventory(
+                        false,
+                        false,
+                        true,
+                        List.of(new AdminProperties.ManualService(
+                                "cv-home",
+                                "CV Home",
+                                "https://liangwendev.com",
+                                "443",
+                                "public homepage"))),
+                null);
         ServiceCollector runtimePorts = () -> List.of(new CollectedService(
                 ServiceSource.PORT,
                 "node",

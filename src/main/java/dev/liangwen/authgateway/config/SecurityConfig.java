@@ -4,6 +4,8 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import dev.liangwen.authgateway.admin.AdminAccessFilter;
+import dev.liangwen.authgateway.admin.AdminProperties;
 import dev.liangwen.authgateway.platform.DatabaseRegisteredClientRepository;
 import dev.liangwen.authgateway.platform.PlatformRegistrationRepository;
 import dev.liangwen.authgateway.user.GatewayOidcUser;
@@ -37,6 +39,7 @@ import org.springframework.security.oauth2.server.authorization.token.JwtEncodin
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
@@ -71,12 +74,14 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain applicationSecurityFilterChain(
             HttpSecurity http,
-            OAuth2UserService<OidcUserRequest, OidcUser> gatewayOidcUserService) throws Exception {
+            OAuth2UserService<OidcUserRequest, OidcUser> gatewayOidcUserService,
+            AdminProperties adminProperties) throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health", "/styles.css", "/admin/**", "/signed-out", "/error")
                         .permitAll()
                         .anyRequest().authenticated())
+                .addFilterBefore(new AdminAccessFilter(adminProperties), AuthorizationFilter.class)
                 .oauth2Login(oauth2 -> oauth2.userInfoEndpoint(userInfo ->
                         userInfo.oidcUserService(gatewayOidcUserService)))
                 .exceptionHandling(exceptions -> exceptions

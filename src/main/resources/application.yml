@@ -42,6 +42,9 @@ auth-gateway:
 
 admin:
   enabled: ${ADMIN_ENABLED:false}
+  access:
+    allowed-proxy-ips: ${ADMIN_ALLOWED_PROXY_IPS:}
+    access-token: ${ADMIN_ACCESS_TOKEN:}
   inventory:
     docker-enabled: ${ADMIN_DOCKER_ENABLED:true}
     systemd-enabled: ${ADMIN_SYSTEMD_ENABLED:true}
