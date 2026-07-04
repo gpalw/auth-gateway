@@ -98,11 +98,13 @@ https://auth.liangwendev.com/login/oauth2/code/google
 Runtime environment:
 
 ```text
-PORT=8080
+PORT=19090
+SERVER_ADDRESS=127.0.0.1
 AUTH_GATEWAY_ISSUER=https://auth.liangwendev.com
 GOOGLE_CLIENT_ID=<google-client-id>
 GOOGLE_CLIENT_SECRET=<google-client-secret>
 SESSION_COOKIE_SECURE=true
+AUTH_GATEWAY_PRODUCTION_SAFETY_ENABLED=true
 ALLOWED_EMAILS=your-email@example.com
 ALLOWED_DOMAINS=
 REQUIRE_VERIFIED_EMAIL=true
@@ -117,7 +119,20 @@ ADMIN_ENABLED=true
 ADMIN_DOCKER_ENABLED=true
 ADMIN_SYSTEMD_ENABLED=true
 ADMIN_PORTS_ENABLED=true
+ADMIN_ALLOWED_PROXY_IPS=
+ADMIN_ACCESS_TOKEN=
 ```
+
+### Stage-1 Production Baseline
+
+Stage-1 production means the gateway is safe for personal production use on the VPS:
+
+- `ALLOWED_EMAILS` or `ALLOWED_DOMAINS` is non-empty, so Google login fails closed.
+- `AUTH_GATEWAY_JWT_PRIVATE_KEY_PATH` points to a persistent RSA private key.
+- `SESSION_COOKIE_SECURE=true`.
+- PostgreSQL is the production database; H2 is local-only or temporary migration state.
+- `/admin/**` is blocked publicly by Nginx and also protected inside the application by loopback/token checks.
+- `scripts/prod-check.sh` passes on the VPS.
 
 ### Persistent JWT Signing Key
 
@@ -156,7 +171,7 @@ ALLOWED_DOMAINS=example.com
 REQUIRE_VERIFIED_EMAIL=true
 ```
 
-If both `ALLOWED_EMAILS` and `ALLOWED_DOMAINS` are empty, any verified Google account can sign in.
+If both `ALLOWED_EMAILS` and `ALLOWED_DOMAINS` are empty, any verified Google account can sign in during local development. In public production mode, auth-gateway refuses to start with an empty allowlist.
 
 ### PostgreSQL
 
@@ -170,6 +185,8 @@ JPA_DDL_AUTO=update
 ```
 
 H2 remains useful for local development, but do not use the file-based H2 database as the long-term production database.
+
+For the live H2-to-PostgreSQL migration checklist, see `docs/operations/h2-to-postgres.md`.
 
 Example Nginx reverse proxy:
 
@@ -187,8 +204,12 @@ server {
     ssl_certificate /etc/letsencrypt/live/auth.liangwendev.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/auth.liangwendev.com/privkey.pem;
 
+    location ^~ /admin {
+        return 404;
+    }
+
     location / {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:19090;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -200,11 +221,11 @@ server {
 }
 ```
 
-With this setup, do not expose port `8080` publicly. Let the Java app bind locally and expose only `80/443` through Nginx.
+With this setup, do not expose port `19090` publicly. Let the Java app bind locally and expose only `80/443` through Nginx.
 
 The same Nginx config is also available at `deploy/nginx/auth-gateway.conf`.
 
-The Nginx config intentionally returns `404` for `/admin` so the read-only inventory UI is not exposed on the public internet.
+The Nginx config intentionally returns `404` for `/admin` so the inventory and platform registry UI are not exposed on the public internet. The application also protects `/admin/**` directly: loopback requests are allowed for SSH tunnels, configured admin bearer tokens are accepted, and forwarded public clients receive `404`.
 
 ## CI/CD Deployment
 
@@ -233,12 +254,14 @@ ADMIN_ENABLED=true
 ADMIN_DOCKER_ENABLED=true
 ADMIN_SYSTEMD_ENABLED=true
 ADMIN_PORTS_ENABLED=true
+ADMIN_ALLOWED_PROXY_IPS=
+ADMIN_ACCESS_TOKEN=
 ```
 
 Then open it through an SSH tunnel:
 
 ```bash
-ssh -L 9090:127.0.0.1:<java-service-port> root@your-vps
+ssh -L 9090:127.0.0.1:19090 root@your-vps
 ```
 
 Open:
