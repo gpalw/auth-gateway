@@ -13,9 +13,9 @@ class DeploySystemdScriptTest {
         String script = Files.readString(Path.of("scripts/deploy-systemd.sh"));
 
         assertThat(script)
-                .contains("if [ -f \"$SCRIPT_DIR/prod-check.sh\" ]; then")
-                .contains("install -m 0755 \"$SCRIPT_DIR/prod-check.sh\" \"$RELEASE_DIR/prod-check.sh\"")
-                .contains("if [ -f \"$SCRIPT_DIR/h2-to-postgres-dry-run.sh\" ]; then")
-                .contains("install -m 0755 \"$SCRIPT_DIR/h2-to-postgres-dry-run.sh\" \"$RELEASE_DIR/h2-to-postgres-dry-run.sh\"");
+                .contains("install_release_script \"prod-check.sh\"")
+                .contains("install_release_script \"h2-to-postgres-dry-run.sh\"")
+                .contains("local previous_path=\"$INSTALL_DIR/current-release/$script_name\"")
+                .contains("install -m 0755 \"$previous_path\" \"$RELEASE_DIR/$script_name\"");
     }
 }

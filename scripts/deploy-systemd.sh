@@ -56,6 +56,18 @@ wait_for_health() {
   return 1
 }
 
+install_release_script() {
+  local script_name="$1"
+  local source_path="$SCRIPT_DIR/$script_name"
+  local previous_path="$INSTALL_DIR/current-release/$script_name"
+
+  if [ -f "$source_path" ]; then
+    install -m 0755 "$source_path" "$RELEASE_DIR/$script_name"
+  elif [ -f "$previous_path" ]; then
+    install -m 0755 "$previous_path" "$RELEASE_DIR/$script_name"
+  fi
+}
+
 if [ ! -f "$JAR_SOURCE" ]; then
   echo "Jar not found: $JAR_SOURCE" >&2
   exit 2
@@ -84,14 +96,8 @@ echo "Health URL: $HEALTH_URL"
 install -d -m 0755 "$INSTALL_DIR" "$RELEASES_DIR" "$BACKUPS_DIR"
 install -d -m 0755 "$RELEASE_DIR" "$BACKUP_DIR"
 install -m 0644 "$JAR_SOURCE" "$RELEASE_DIR/auth-gateway.jar"
-
-if [ -f "$SCRIPT_DIR/prod-check.sh" ]; then
-  install -m 0755 "$SCRIPT_DIR/prod-check.sh" "$RELEASE_DIR/prod-check.sh"
-fi
-
-if [ -f "$SCRIPT_DIR/h2-to-postgres-dry-run.sh" ]; then
-  install -m 0755 "$SCRIPT_DIR/h2-to-postgres-dry-run.sh" "$RELEASE_DIR/h2-to-postgres-dry-run.sh"
-fi
+install_release_script "prod-check.sh"
+install_release_script "h2-to-postgres-dry-run.sh"
 
 cat > "$RELEASE_DIR/deploy-info.env" <<EOF
 APP_NAME=$APP_NAME
