@@ -39,6 +39,8 @@ server:
 auth-gateway:
   production-safety:
     enabled: ${AUTH_GATEWAY_PRODUCTION_SAFETY_ENABLED:true}
+  runtime-summary:
+    deploy-info-location: ${AUTH_GATEWAY_DEPLOY_INFO_PATH:/opt/auth-gateway/current-release/deploy-info.env}
 
 admin:
   enabled: ${ADMIN_ENABLED:false}
