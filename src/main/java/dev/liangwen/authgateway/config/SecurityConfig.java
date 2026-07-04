@@ -78,7 +78,13 @@ public class SecurityConfig {
             AdminProperties adminProperties) throws Exception {
         http
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/styles.css", "/admin/**", "/signed-out", "/error")
+                        .requestMatchers(
+                                "/actuator/health",
+                                "/actuator/info",
+                                "/styles.css",
+                                "/admin/**",
+                                "/signed-out",
+                                "/error")
                         .permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new AdminAccessFilter(adminProperties), AuthorizationFilter.class)

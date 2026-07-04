@@ -67,4 +67,10 @@ class SecurityConfigTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/oauth2/authorization/google"));
     }
+
+    @Test
+    void allowsUnauthenticatedActuatorInfoForProductionProbes() throws Exception {
+        mockMvc.perform(get("/actuator/info"))
+                .andExpect(status().isOk());
+    }
 }
