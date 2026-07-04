@@ -16,6 +16,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {
+        "auth-gateway.production-safety.enabled=false",
         "identity.issuer=https://auth.example.com",
         "identity.apps[0].id=job-crm",
         "identity.apps[0].name=Job CRM",

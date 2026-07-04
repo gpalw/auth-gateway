@@ -36,6 +36,10 @@ server:
         same-site: lax
         secure: ${SESSION_COOKIE_SECURE:false}
 
+auth-gateway:
+  production-safety:
+    enabled: ${AUTH_GATEWAY_PRODUCTION_SAFETY_ENABLED:true}
+
 admin:
   enabled: ${ADMIN_ENABLED:false}
   inventory:

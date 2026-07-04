@@ -17,6 +17,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {
+        "auth-gateway.production-safety.enabled=false",
         "admin.enabled=true",
         "admin.inventory.docker-enabled=false",
         "admin.inventory.systemd-enabled=false",
