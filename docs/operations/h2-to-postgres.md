@@ -43,6 +43,26 @@ sudo H2_DATABASE_PATH=/opt/auth-gateway/data/auth-gateway \
 
 Review the exported SQL before importing. Do not run blind import commands on production data.
 
+## JDBC Copy Utility
+
+For the live cutover, use `scripts/H2ToPostgresCopy.java` after PostgreSQL schema creation. It copies the gateway-owned
+tables from an offline H2 backup into PostgreSQL with prepared statements, preserving UUIDs used by downstream apps.
+
+Compile it with the H2 and PostgreSQL JDBC jars, then run it with:
+
+```bash
+javac -cp h2.jar:postgresql.jar H2ToPostgresCopy.java
+java -cp .:h2.jar:postgresql.jar H2ToPostgresCopy \
+  'jdbc:h2:file:/opt/auth-gateway/backups/h2-to-postgres-<timestamp>/auth-gateway;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;IFEXISTS=TRUE' \
+  '<h2-user>' \
+  '<h2-password>' \
+  'jdbc:postgresql://127.0.0.1:5432/auth_gateway' \
+  auth_gateway \
+  '<postgres-password>'
+```
+
+Do not paste real passwords into shared logs. Prefer feeding this command from a root-only maintenance script.
+
 ## PostgreSQL Setup
 
 ```bash
