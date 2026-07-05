@@ -2,6 +2,7 @@ package dev.liangwen.authgateway.admin;
 
 import dev.liangwen.authgateway.platform.PlatformRegistrationForm;
 import dev.liangwen.authgateway.platform.PlatformRegistrationService;
+import dev.liangwen.authgateway.ops.RuntimeSummaryService;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Controller;
@@ -17,17 +18,24 @@ public class AdminServicesController {
 
     private final ServiceInventoryService inventory;
     private final PlatformRegistrationService platforms;
+    private final RuntimeSummaryService runtimeSummary;
 
     public AdminServicesController(
             ServiceInventoryService inventory,
-            PlatformRegistrationService platforms) {
+            PlatformRegistrationService platforms,
+            RuntimeSummaryService runtimeSummary) {
         this.inventory = inventory;
         this.platforms = platforms;
+        this.runtimeSummary = runtimeSummary;
     }
 
     @GetMapping("/admin")
-    String adminRoot() {
-        return "redirect:/admin/services";
+    String adminRoot(Model model) {
+        model.addAttribute("dashboard", new AdminDashboard(
+                runtimeSummary.summary(),
+                inventory.inventory(),
+                platforms.allPlatforms()));
+        return "admin/dashboard";
     }
 
     @GetMapping("/admin/services")

@@ -40,6 +40,20 @@ class AdminServicesControllerTest {
     private MockMvc mockMvc;
 
     @Test
+    void rendersAdminDashboardWithoutGoogleLogin() throws Exception {
+        mockMvc.perform(get("/admin"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Operations Dashboard")))
+                .andExpect(content().string(containsString("https://auth.example.com")))
+                .andExpect(content().string(containsString("Database")))
+                .andExpect(content().string(containsString("SSO platforms")))
+                .andExpect(content().string(containsString("Job CRM")))
+                .andExpect(content().string(containsString("CV Home")))
+                .andExpect(content().string(containsString("Service Inventory")))
+                .andExpect(content().string(containsString("Platform Registry")));
+    }
+
+    @Test
     void rendersServiceInventoryWithoutGoogleLogin() throws Exception {
         mockMvc.perform(get("/admin/services"))
                 .andExpect(status().isOk())

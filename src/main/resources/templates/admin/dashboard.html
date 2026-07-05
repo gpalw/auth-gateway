@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Operations Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="shell admin-shell">
+    <section class="hero admin-hero">
+        <div>
+            <p class="eyebrow">Auth Gateway Admin</p>
+            <h1>Operations Dashboard</h1>
+            <p class="muted">SSH-tunnel-only control room for runtime readiness, platform SSO, and server service inventory.</p>
+        </div>
+        <nav class="admin-nav" aria-label="Admin navigation">
+            <a class="text-link" href="/admin/services">Service Inventory</a>
+            <a class="text-link" href="/admin/platforms">Platform Registry</a>
+        </nav>
+    </section>
+
+    <section class="dashboard-metrics" aria-label="Gateway status">
+        <div class="metric-tile">
+            <span class="label">Readiness</span>
+            <strong th:text="${dashboard.readinessLabel()}">Ready</strong>
+            <small>PostgreSQL, allowlist, and signing key</small>
+        </div>
+        <div class="metric-tile">
+            <span class="label">Database</span>
+            <strong th:text="${dashboard.databaseLabel()}">PostgreSQL</strong>
+            <small th:text="${dashboard.runtimeValue('issuer')}">https://auth.example.com</small>
+        </div>
+        <div class="metric-tile">
+            <span class="label">SSO platforms</span>
+            <strong th:text="${dashboard.enabledPlatformCount() + ' / ' + dashboard.platformCount()}">3 / 3</strong>
+            <small>Enabled downstream clients</small>
+        </div>
+        <div class="metric-tile">
+            <span class="label">Services</span>
+            <strong th:text="${dashboard.serviceCount()}">0</strong>
+            <small th:text="${dashboard.runningServiceCount() + ' running, ' + dashboard.ssoServiceCount() + ' SSO, ' + dashboard.plainServiceCount() + ' plain'}">0 running</small>
+        </div>
+    </section>
+
+    <section class="notice" th:if="${dashboard.hasWarnings()}">
+        <strong>Collector warnings</strong>
+        <ul>
+            <li th:each="error : ${dashboard.inventory().errors()}" th:text="${error}">collector error</li>
+        </ul>
+    </section>
+
+    <section class="dashboard-grid">
+        <section class="admin-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Runtime</h2>
+                    <p class="muted">Safe deployment facts exposed for operators.</p>
+                </div>
+            </div>
+            <dl class="runtime-list">
+                <div>
+                    <dt>Issuer</dt>
+                    <dd th:text="${dashboard.runtimeValue('issuer')}">https://auth.example.com</dd>
+                </div>
+                <div>
+                    <dt>Revision</dt>
+                    <dd th:text="${dashboard.revisionLabel()}">abc123</dd>
+                </div>
+                <div>
+                    <dt>Deployed</dt>
+                    <dd th:text="${dashboard.runtimeValue('deployedAt')}">2026-07-05T01:02:03Z</dd>
+                </div>
+                <div>
+                    <dt>GitHub run</dt>
+                    <dd th:text="${dashboard.runtimeValue('githubRunId')}">456</dd>
+                </div>
+                <div>
+                    <dt>Admin enabled</dt>
+                    <dd th:text="${dashboard.booleanLabel('adminEnabled')}">Yes</dd>
+                </div>
+                <div>
+                    <dt>Allowlist</dt>
+                    <dd th:text="${dashboard.booleanLabel('allowlistConfigured')}">Yes</dd>
+                </div>
+                <div>
+                    <dt>JWT key</dt>
+                    <dd th:text="${dashboard.booleanLabel('signingKeyConfigured')}">Yes</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="admin-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Platform Registry</h2>
+                    <p class="muted">Downstream applications that trust this gateway.</p>
+                </div>
+                <a class="text-link" href="/admin/platforms">Manage</a>
+            </div>
+            <table class="compact-table">
+                <thead>
+                <tr>
+                    <th>Platform</th>
+                    <th>Status</th>
+                    <th>Client</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="platform : ${dashboard.platformPreview()}">
+                    <td>
+                        <strong th:text="${platform.name()}">Job CRM</strong>
+                        <small th:text="${platform.homeUrl()}">https://tools.example.com/job/</small>
+                    </td>
+                    <td><span class="pill strong" th:text="${platform.enabled() ? 'ENABLED' : 'DISABLED'}">ENABLED</span></td>
+                    <td th:text="${platform.clientId()}">job-crm</td>
+                </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="admin-panel dashboard-wide">
+            <div class="panel-heading">
+                <div>
+                    <h2>Service Inventory</h2>
+                    <p class="muted">Configured platforms, manual services, systemd, Docker, and listening ports.</p>
+                </div>
+                <a class="text-link" href="/admin/services">Open list</a>
+            </div>
+            <table class="compact-table">
+                <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Port</th>
+                    <th>Auth</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="item : ${dashboard.servicePreview()}">
+                    <td>
+                        <strong th:text="${item.name()}">service</strong>
+                        <small th:text="${item.url() != '' ? item.url() : item.description()}">description</small>
+                    </td>
+                    <td><span class="pill" th:text="${item.source()}">CONFIG</span></td>
+                    <td><span class="pill" th:text="${item.status()}">UNKNOWN</span></td>
+                    <td th:text="${item.port()}">443</td>
+                    <td><span class="pill strong" th:text="${item.authType()}">SSO</span></td>
+                </tr>
+                </tbody>
+            </table>
+        </section>
+    </section>
+</main>
+</body>
+</html>
