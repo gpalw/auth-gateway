@@ -21,6 +21,25 @@ read_env_value() {
   if [ ! -f "$ENV_FILE" ]; then
     return 0
   fi
+  if [ -r "$ENV_FILE" ]; then
+    awk_env_value "$key"
+    return
+  fi
+  if command -v sudo >/dev/null 2>&1 && sudo -n test -r "$ENV_FILE" 2>/dev/null; then
+    sudo -n awk -F= -v key="$key" '
+      $1 == key {
+        value = substr($0, length(key) + 2)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        gsub(/^"|"$/, "", value)
+        gsub(/^'\''|'\''$/, "", value)
+        print value
+      }
+    ' "$ENV_FILE" | tail -n 1
+  fi
+}
+
+awk_env_value() {
+  local key="$1"
   awk -F= -v key="$key" '
     $1 == key {
       value = substr($0, length(key) + 2)

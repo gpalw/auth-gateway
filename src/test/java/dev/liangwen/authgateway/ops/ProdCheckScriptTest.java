@@ -31,6 +31,15 @@ class ProdCheckScriptTest {
     }
 
     @Test
+    void scriptReadsProtectedEnvFileWithNonInteractiveSudo() throws Exception {
+        String script = Files.readString(Path.of("scripts/prod-check.sh"));
+
+        assertThat(script)
+                .contains("sudo -n awk")
+                .contains("sudo -n test -r \"$ENV_FILE\"");
+    }
+
+    @Test
     void scriptHasValidBashSyntaxWhenBashIsAvailable() throws Exception {
         assumeTrue(hasBash());
 
