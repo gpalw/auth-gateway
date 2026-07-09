@@ -1,6 +1,7 @@
 package dev.liangwen.authgateway.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.liangwen.authgateway.platform.PlatformRegistrationRepository;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -56,6 +58,16 @@ class AdminPlatformsControllerTest {
     }
 
     @Test
+    void editPlatformDoesNotRenderStoredClientSecret() throws Exception {
+        UUID id = registrations.findByClientId("job-crm").orElseThrow().id();
+
+        mockMvc.perform(get("/admin/platforms/{id}/edit", id))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Edit Platform")))
+                .andExpect(content().string(not(org.hamcrest.Matchers.containsString("value=\"secret\""))));
+    }
+
+    @Test
     void createsPlatformAndMakesItAvailableAsOidcClient() throws Exception {
         mockMvc.perform(post("/admin/platforms")
                         .with(csrf())
@@ -89,5 +101,22 @@ class AdminPlatformsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Client id already exists: job-crm")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Duplicate Job CRM")));
+    }
+
+    @Test
+    void validationErrorsDoNotEchoSubmittedClientSecret() throws Exception {
+        mockMvc.perform(post("/admin/platforms")
+                        .with(csrf())
+                        .param("clientId", "job-crm")
+                        .param("name", "Duplicate Job CRM")
+                        .param("description", "Duplicate")
+                        .param("homeUrl", "https://tools.example.com/job/")
+                        .param("clientSecret", "submitted-secret-must-not-render")
+                        .param("redirectUrisText", "https://tools.example.com/job/login/oauth2/code/auth-gateway")
+                        .param("postLogoutRedirectUrisText", "https://tools.example.com/job/")
+                        .param("enabled", "true"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Client id already exists: job-crm")))
+                .andExpect(content().string(not(org.hamcrest.Matchers.containsString("submitted-secret-must-not-render"))));
     }
 }

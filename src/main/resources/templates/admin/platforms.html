@@ -44,7 +44,7 @@
             </label>
             <label>
                 <span>Client Secret</span>
-                <input th:field="*{clientSecret}">
+                <input type="password" th:field="*{clientSecret}" autocomplete="new-password" th:placeholder="${editingId == '' ? 'Generated when blank' : 'Leave blank to keep current secret'}">
             </label>
             <label>
                 <span>Redirect URIs</span>

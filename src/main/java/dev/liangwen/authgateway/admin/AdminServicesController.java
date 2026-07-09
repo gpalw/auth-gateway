@@ -61,6 +61,7 @@ public class AdminServicesController {
         try {
             platforms.create(form);
         } catch (IllegalArgumentException ex) {
+            form.clearClientSecret();
             preparePlatformModel(model, form, "", ex.getMessage());
             return "admin/platforms";
         }
@@ -75,6 +76,7 @@ public class AdminServicesController {
         try {
             platforms.update(id, form);
         } catch (IllegalArgumentException ex) {
+            form.clearClientSecret();
             preparePlatformModel(model, form, id.toString(), ex.getMessage());
             return "admin/platforms";
         }

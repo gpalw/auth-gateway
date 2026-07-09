@@ -43,10 +43,14 @@ public class PlatformRegistrationForm {
                 registration.name(),
                 registration.description(),
                 registration.homeUrl(),
-                registration.clientSecret(),
+                "",
                 String.join("\n", registration.redirectUris()),
                 String.join("\n", registration.postLogoutRedirectUris()),
                 registration.enabled());
+    }
+
+    public void clearClientSecret() {
+        this.clientSecret = "";
     }
 
     public String getClientId() {
