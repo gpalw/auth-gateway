@@ -12,15 +12,18 @@ import org.springframework.util.StringUtils;
 public class DatabaseRegisteredClientRepository implements RegisteredClientRepository {
 
     private final PlatformRegistrationRepository registrations;
+    private final ProductionClientSecretPolicy clientSecrets;
 
-    public DatabaseRegisteredClientRepository(PlatformRegistrationRepository registrations) {
+    public DatabaseRegisteredClientRepository(
+            PlatformRegistrationRepository registrations, ProductionClientSecretPolicy clientSecrets) {
         this.registrations = registrations;
+        this.clientSecrets = clientSecrets;
     }
 
     @Override
     public void save(RegisteredClient registeredClient) {
         PlatformRegistration existing = registrations.findByClientId(registeredClient.getClientId()).orElse(null);
-        registrations.save(new PlatformRegistration(
+        PlatformRegistration registration = new PlatformRegistration(
                 existing == null ? null : existing.id(),
                 registeredClient.getClientId(),
                 stripNoop(registeredClient.getClientSecret()),
@@ -29,7 +32,9 @@ public class DatabaseRegisteredClientRepository implements RegisteredClientRepos
                 existing == null ? firstOrEmpty(registeredClient.getPostLogoutRedirectUris()) : existing.homeUrl(),
                 registeredClient.getRedirectUris().stream().toList(),
                 registeredClient.getPostLogoutRedirectUris().stream().toList(),
-                true));
+                true);
+        clientSecrets.validate(registration);
+        registrations.save(registration);
     }
 
     @Override
@@ -37,7 +42,7 @@ public class DatabaseRegisteredClientRepository implements RegisteredClientRepos
         try {
             return registrations.findById(UUID.fromString(id))
                     .filter(PlatformRegistration::enabled)
-                    .map(DatabaseRegisteredClientRepository::toRegisteredClient)
+                    .map(this::toRegisteredClient)
                     .orElse(null);
         } catch (IllegalArgumentException ex) {
             return null;
@@ -46,13 +51,18 @@ public class DatabaseRegisteredClientRepository implements RegisteredClientRepos
 
     @Override
     public RegisteredClient findByClientId(String clientId) {
-        return registrations.findByClientId(clientId)
-                .filter(PlatformRegistration::enabled)
-                .map(DatabaseRegisteredClientRepository::toRegisteredClient)
-                .orElse(null);
+        try {
+            return registrations.findByClientId(clientId)
+                    .filter(PlatformRegistration::enabled)
+                    .map(this::toRegisteredClient)
+                    .orElse(null);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
-    private static RegisteredClient toRegisteredClient(PlatformRegistration registration) {
+    private RegisteredClient toRegisteredClient(PlatformRegistration registration) {
+        clientSecrets.validate(registration);
         RegisteredClient.Builder builder = RegisteredClient.withId(registration.id().toString())
                 .clientId(registration.clientId())
                 .clientSecret("{noop}" + registration.clientSecret())

@@ -8,6 +8,7 @@ import dev.liangwen.authgateway.admin.AdminAccessFilter;
 import dev.liangwen.authgateway.admin.AdminProperties;
 import dev.liangwen.authgateway.platform.DatabaseRegisteredClientRepository;
 import dev.liangwen.authgateway.platform.PlatformRegistrationRepository;
+import dev.liangwen.authgateway.platform.ProductionClientSecretPolicy;
 import dev.liangwen.authgateway.user.GatewayOidcUser;
 import dev.liangwen.authgateway.user.GatewayUser;
 import dev.liangwen.authgateway.user.UserIdentityService;
@@ -69,7 +70,7 @@ public class SecurityConfig {
                 .addFilterAfter(new AuthorizationEndpointLoginRedirectFilter(), SecurityContextHolderFilter.class)
                 .anonymous(anonymous -> anonymous.disable())
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(
-                        new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/google")));
+                        new LoginUrlAuthenticationEntryPoint("/login")));
 
         return http.build();
     }
@@ -101,6 +102,8 @@ public class SecurityConfig {
                                 "/styles.css",
                                 "/portal.css",
                                 "/portal.js",
+                                "/auth.css",
+                                "/login",
                                 "/admin/**",
                                 "/signed-out",
                                 "/error")
@@ -108,14 +111,14 @@ public class SecurityConfig {
                         .anyRequest().authenticated();
                 })
                 .addFilterBefore(new AdminAccessFilter(adminProperties), AuthorizationFilter.class)
-                .oauth2Login(oauth2 -> oauth2.userInfoEndpoint(userInfo ->
+                .oauth2Login(oauth2 -> oauth2.loginPage("/login").userInfoEndpoint(userInfo ->
                         userInfo.oidcUserService(gatewayOidcUserService)))
                 .exceptionHandling(exceptions -> exceptions
                         .defaultAuthenticationEntryPointFor(
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
                                 PathPatternRequestMatcher.pathPattern("/api/**"))
                         .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/google"),
+                                new LoginUrlAuthenticationEntryPoint("/login"),
                                 AnyRequestMatcher.INSTANCE))
                 .logout(logout -> logout.logoutSuccessUrl("/signed-out"));
 
@@ -145,8 +148,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    RegisteredClientRepository registeredClientRepository(PlatformRegistrationRepository registrations) {
-        return new DatabaseRegisteredClientRepository(registrations);
+    RegisteredClientRepository registeredClientRepository(
+            PlatformRegistrationRepository registrations, ProductionClientSecretPolicy clientSecrets) {
+        return new DatabaseRegisteredClientRepository(registrations, clientSecrets);
     }
 
     @Bean
@@ -195,7 +199,7 @@ public class SecurityConfig {
                 FilterChain filterChain) throws ServletException, IOException {
             if (isAuthorizeRequest(request) && !isAuthenticated()) {
                 requestCache.saveRequest(request, response);
-                response.sendRedirect(request.getContextPath() + "/oauth2/authorization/google");
+                response.sendRedirect(request.getContextPath() + "/login");
                 return;
             }
             filterChain.doFilter(request, response);

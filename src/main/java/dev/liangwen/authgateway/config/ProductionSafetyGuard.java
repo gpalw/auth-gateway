@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
-class ProductionSafetyGuard {
+public class ProductionSafetyGuard {
 
     private final IdentityProperties identity;
     private final ProductionSafetyProperties safety;
@@ -26,7 +26,7 @@ class ProductionSafetyGuard {
 
     @PostConstruct
     void validate() {
-        if (!safety.isEnabled() || !isProductionMode()) {
+        if (!isEnforced()) {
             return;
         }
 
@@ -51,6 +51,10 @@ class ProductionSafetyGuard {
             throw new IllegalStateException("Unsafe auth-gateway production configuration: "
                     + String.join("; ", failures));
         }
+    }
+
+    public boolean isEnforced() {
+        return safety.isEnabled() && isProductionMode();
     }
 
     private boolean isProductionMode() {

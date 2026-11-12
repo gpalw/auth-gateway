@@ -40,10 +40,10 @@ class PortalControllerTest {
     private MockMvc mockMvc;
 
     @Test
-    void redirectsAnonymousUsersToGoogleLogin() throws Exception {
+    void redirectsAnonymousUsersToLoginPage() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isFound())
-                .andExpect(redirectedUrl("/oauth2/authorization/google"));
+                .andExpect(redirectedUrl("/login"));
     }
 
     @Test
@@ -70,6 +70,6 @@ class PortalControllerTest {
 
         mockMvc.perform(get("/signed-out"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Signed out")));
+                .andExpect(content().string(containsString("See you next time.")));
     }
 }

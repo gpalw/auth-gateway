@@ -225,7 +225,9 @@ With this setup, do not expose port `19090` publicly. Let the Java app bind loca
 
 The same Nginx config is also available at `deploy/nginx/auth-gateway.conf`.
 
-The Nginx config intentionally returns `404` for `/admin` so the inventory and platform registry UI are not exposed on the public internet. The application also protects `/admin/**` directly: loopback requests are allowed for SSH tunnels, configured admin bearer tokens are accepted, and forwarded public clients receive `404`.
+The Nginx config intentionally returns `404` for `/admin` so the inventory and platform registry UI are not exposed on the public internet. The application also protects `/admin/**` directly: header-free loopback requests are allowed for SSH tunnels, configured admin bearer tokens are accepted, and forwarded public clients receive `404`. It unwraps framework request wrappers before checking the transport peer and application-relative admin path, so forwarded addresses and prefixes cannot impersonate an SSH connection. Keep `server.forward-headers-strategy=framework`; container/native address rewriting is not supported for tokenless admin access.
+
+For the documented local Nginx proxy, an optional `ADMIN_ALLOWED_PROXY_IPS` entry authorizes the actual client address appended by Nginx at the right-hand end of `X-Forwarded-For`, not a client-supplied first entry. The TCP peer must be loopback, and forwarded loopback, duplicate/blank forwarding chains, and RFC `Forwarded` requests are rejected without a token. The proxy must always append its observed peer, as the supplied Nginx config does. For other proxy layouts, use an admin token rather than relying on forwarded addresses. When a token is configured, even loopback requests must supply it.
 
 ## CI/CD Deployment
 
@@ -351,6 +353,10 @@ ONLINE_BILLING_CLIENT_SECRET
 ```
 
 Local fallback values exist only so the app can boot without real secrets. Deployment should set real secrets. After the rows exist in the database, `/admin/platforms` is the source of truth for platform onboarding.
+
+In production mode, enabled clients cannot use blank secrets, the three built-in `dev-...` defaults, or `replace-with-...` / `your-...` example values. This check uses the same production detection and safety switch as the startup guard. It checks existing database rows at startup, new registrations and updates before saving, and clients before they can authenticate. Disabled registrations may retain an old placeholder but cannot be enabled with it. Local development defaults remain supported.
+
+These checks do not generate or rotate existing credentials. If startup reports an unsafe stored client, explicitly update that registration through an authorized maintenance process or disable it before restarting. Changing a seed environment variable does not replace an existing database value. A valid stored registration is not rejected just because an unused startup seed still has its local default.
 
 ## Downstream Spring Boot App
 

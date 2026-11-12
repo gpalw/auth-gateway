@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Sign in · Auth Gateway</title>
+  <link rel="stylesheet" th:href="@{/auth.css}">
+</head>
+<body class="identity-page">
+  <a class="skip-link" href="#sign-in">Skip to sign in</a>
+  <div class="identity-layout">
+    <aside th:replace="~{fragments/identity :: story}"></aside>
+    <main class="identity-main" id="sign-in">
+      <div class="mobile-brand" th:insert="~{fragments/identity :: brand}"></div>
+      <div class="main-topline"><span>YOUR PERSONAL WORKSPACE</span><span class="topline-symbol" aria-hidden="true">↗</span></div>
+      <section class="access-panel" aria-labelledby="login-heading">
+        <div class="access-symbol" aria-hidden="true"><svg width="30" height="34" viewBox="0 0 30 34" fill="none"><path d="M3 31V3h24v28M10 31V10h10v21" stroke="currentColor" stroke-width="1.5"/><path d="M15 23v8" stroke="currentColor" stroke-width="1.5"/></svg></div>
+        <p class="section-label">LET'S GET YOU STARTED</p>
+        <h1 id="login-heading">Welcome back.</h1>
+        <p class="access-description">Your apps, projects, and next big idea.<br>It all starts here.</p>
+        <div class="auth-notice auth-notice-error" role="alert" th:if="${param.error != null}">
+          <strong>We couldn't sign you in.</strong>
+          <p>Please try again with an approved Google account. If this keeps happening, contact your workspace administrator.</p>
+        </div>
+        <a class="google-button" th:if="${googleAvailable}" th:href="@{/oauth2/authorization/google}">
+          <svg th:replace="~{fragments/identity :: google}"></svg><span>Continue with Google</span><svg th:replace="~{fragments/identity :: arrow}"></svg>
+        </a>
+        <div class="auth-notice" role="status" th:unless="${googleAvailable}">
+          <strong>Sign-in is being set up.</strong>
+          <p>Google sign-in isn't configured yet. Please contact your workspace administrator.</p>
+        </div>
+        <p class="sign-in-help" th:if="${googleAvailable}">Continue with the Google account you use for this workspace.</p>
+        <div class="access-detail">
+          <span class="detail-icon"><svg th:replace="~{fragments/identity :: lock}"></svg></span>
+          <div><strong>Your account. Your control.</strong><p>Authentication happens with Google.<br>Your Google password stays there.</p></div>
+        </div>
+      </section>
+      <footer th:replace="~{fragments/identity :: footer}"></footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -56,7 +56,7 @@ class SecurityConfigTest {
     }
 
     @Test
-    void redirectsUnauthenticatedAuthorizeRequestsToGoogleLogin() throws Exception {
+    void redirectsUnauthenticatedAuthorizeRequestsToLoginPage() throws Exception {
         mockMvc.perform(get("/oauth2/authorize")
                         .param("response_type", "code")
                         .param("client_id", "job-crm")
@@ -65,7 +65,7 @@ class SecurityConfigTest {
                         .param("state", "test-state")
                         .param("nonce", "test-nonce"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/oauth2/authorization/google"));
+                .andExpect(redirectedUrl("/login"));
     }
 
     @Test
