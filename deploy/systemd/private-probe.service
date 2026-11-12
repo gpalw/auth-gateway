@@ -1,0 +1,19 @@
+[Unit]
+Description=Private navigation low-risk probe
+After=network-online.target auth-gateway.service
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/private-probe
+Environment=AUTH_GATEWAY_ORIGIN=http://127.0.0.1:19090
+Environment=PROBE_PORT=19130
+ExecStart=/usr/bin/node /opt/private-probe/server.cjs
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+[Install]
+WantedBy=multi-user.target

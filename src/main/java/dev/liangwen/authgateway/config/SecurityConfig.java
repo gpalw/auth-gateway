@@ -11,6 +11,9 @@ import dev.liangwen.authgateway.platform.PlatformRegistrationRepository;
 import dev.liangwen.authgateway.user.GatewayOidcUser;
 import dev.liangwen.authgateway.user.GatewayUser;
 import dev.liangwen.authgateway.user.UserIdentityService;
+import dev.liangwen.authgateway.web.PrivatePortalProperties;
+import dev.liangwen.authgateway.web.PrivatePortalAccess;
+import org.springframework.security.authorization.AuthorizationDecision;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -50,7 +53,7 @@ import org.springframework.security.web.util.matcher.AnyRequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(IdentityProperties.class)
+@EnableConfigurationProperties({IdentityProperties.class, PrivatePortalProperties.class})
 public class SecurityConfig {
 
     @Bean
@@ -75,18 +78,35 @@ public class SecurityConfig {
     SecurityFilterChain applicationSecurityFilterChain(
             HttpSecurity http,
             OAuth2UserService<OidcUserRequest, OidcUser> gatewayOidcUserService,
-            AdminProperties adminProperties) throws Exception {
+            AdminProperties adminProperties,
+            PrivatePortalProperties portal) throws Exception {
+        if (portal.enabled()) {
+            HttpSessionRequestCache privateRequests = new HttpSessionRequestCache();
+            privateRequests.setMatchingRequestParameterName(null);
+            privateRequests.setRequestMatcher(request -> "GET".equals(request.getMethod())
+                    && !request.getRequestURI().startsWith("/api/"));
+            http.requestCache(cache -> cache.requestCache(privateRequests));
+        }
         http
-                .authorizeHttpRequests(authorize -> authorize
+                .authorizeHttpRequests(authorize -> {
+                    if (portal.enabled()) {
+                        authorize.requestMatchers("/", "/api/me", "/api/apps", "/api/access/**", "/sso/start/**")
+                                .access((authentication, context) -> new AuthorizationDecision(
+                                        PrivatePortalAccess.allowed(authentication.get(), portal)));
+                    }
+                    authorize
                         .requestMatchers(
                                 "/actuator/health",
                                 "/actuator/info",
                                 "/styles.css",
+                                "/portal.css",
+                                "/portal.js",
                                 "/admin/**",
                                 "/signed-out",
                                 "/error")
                         .permitAll()
-                        .anyRequest().authenticated())
+                        .anyRequest().authenticated();
+                })
                 .addFilterBefore(new AdminAccessFilter(adminProperties), AuthorizationFilter.class)
                 .oauth2Login(oauth2 -> oauth2.userInfoEndpoint(userInfo ->
                         userInfo.oidcUserService(gatewayOidcUserService)))
