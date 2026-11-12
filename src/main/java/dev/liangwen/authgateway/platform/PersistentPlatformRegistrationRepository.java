@@ -1,6 +1,5 @@
 package dev.liangwen.authgateway.platform;
 
-import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -10,18 +9,9 @@ import org.springframework.stereotype.Repository;
 class PersistentPlatformRegistrationRepository implements PlatformRegistrationRepository {
 
     private final JpaPlatformRegistrationRepository repository;
-    private final ProductionClientSecretPolicy clientSecrets;
 
-    PersistentPlatformRegistrationRepository(
-            JpaPlatformRegistrationRepository repository, ProductionClientSecretPolicy clientSecrets) {
+    PersistentPlatformRegistrationRepository(JpaPlatformRegistrationRepository repository) {
         this.repository = repository;
-        this.clientSecrets = clientSecrets;
-    }
-
-    @PostConstruct
-    void validatePersistedClients() {
-        // Validate existing rows before startup seeding, which deliberately never overwrites them.
-        findAllByEnabledTrueOrderByNameAsc().forEach(clientSecrets::validate);
     }
 
     @Override
@@ -55,7 +45,6 @@ class PersistentPlatformRegistrationRepository implements PlatformRegistrationRe
 
     @Override
     public PlatformRegistration save(PlatformRegistration registration) {
-        clientSecrets.validate(registration);
         PlatformRegistrationEntity entity = registration.id() == null
                 ? PlatformRegistrationEntity.from(registration)
                 : repository.findById(registration.id())

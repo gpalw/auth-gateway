@@ -8,7 +8,6 @@ import dev.liangwen.authgateway.admin.AdminAccessFilter;
 import dev.liangwen.authgateway.admin.AdminProperties;
 import dev.liangwen.authgateway.platform.DatabaseRegisteredClientRepository;
 import dev.liangwen.authgateway.platform.PlatformRegistrationRepository;
-import dev.liangwen.authgateway.platform.ProductionClientSecretPolicy;
 import dev.liangwen.authgateway.user.GatewayOidcUser;
 import dev.liangwen.authgateway.user.GatewayUser;
 import dev.liangwen.authgateway.user.UserIdentityService;
@@ -148,9 +147,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    RegisteredClientRepository registeredClientRepository(
-            PlatformRegistrationRepository registrations, ProductionClientSecretPolicy clientSecrets) {
-        return new DatabaseRegisteredClientRepository(registrations, clientSecrets);
+    RegisteredClientRepository registeredClientRepository(PlatformRegistrationRepository registrations) {
+        return new DatabaseRegisteredClientRepository(registrations);
     }
 
     @Bean

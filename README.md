@@ -354,10 +354,6 @@ ONLINE_BILLING_CLIENT_SECRET
 
 Local fallback values exist only so the app can boot without real secrets. Deployment should set real secrets. After the rows exist in the database, `/admin/platforms` is the source of truth for platform onboarding.
 
-In production mode, enabled clients cannot use blank secrets, the three built-in `dev-...` defaults, or `replace-with-...` / `your-...` example values. This check uses the same production detection and safety switch as the startup guard. It checks existing database rows at startup, new registrations and updates before saving, and clients before they can authenticate. Disabled registrations may retain an old placeholder but cannot be enabled with it. Local development defaults remain supported.
-
-These checks do not generate or rotate existing credentials. If startup reports an unsafe stored client, explicitly update that registration through an authorized maintenance process or disable it before restarting. Changing a seed environment variable does not replace an existing database value. A valid stored registration is not rejected just because an unused startup seed still has its local default.
-
 ## Downstream Spring Boot App
 
 A Spring Boot platform can use this gateway as an OAuth2 login provider:
