@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Relay usage</title><link rel="stylesheet" href="/dashboard.css"><script src="/dashboard.js" defer></script></head>
+<body><main><header><span class="eyebrow">CONTROLLED API RELAY</span><h1>Usage &amp; held charges</h1><p>Private owner view. Amounts are estimated USD; held charges remain unavailable until verified.</p></header>
+<form id="connect"><label for="token">Owner access token</label><div class="controls"><input id="token" type="password" autocomplete="off" required minlength="32" placeholder="Enter your local admin token"><button>Connect</button><button id="forget" type="button">Clear view</button></div><p id="status" role="status">Use a direct loopback connection or SSH tunnel.</p></form>
+<section id="results" hidden><div class="cards"><article><span>Settled / verified USD</span><strong id="cost">—</strong></article><article><span>Held liability USD</span><strong id="held">—</strong></article><article><span>Requests</span><strong id="requests">—</strong></article></div>
+<h2>Gateway keys</h2><div class="table-wrap"><table><thead><tr><th>Name / prefix</th><th>Models</th><th>Status</th><th>Monthly / lifetime USD</th><th>RPM / concurrent</th></tr></thead><tbody id="keys"></tbody></table></div>
+<h2>Daily usage</h2><div class="table-wrap"><table><thead><tr><th>UTC day</th><th>Key prefix</th><th>Requests</th><th>Input / output / cached tokens</th><th>Cost USD</th><th>Held USD</th></tr></thead><tbody id="daily"></tbody></table></div>
+<h2>Recent requests</h2><p>Last 200 requests. No prompts, responses or credentials are retained.</p><div class="table-wrap"><table><thead><tr><th>Time (UTC)</th><th>Key prefix / model</th><th>Outcome / category</th><th>Cost USD</th><th>Held USD</th></tr></thead><tbody id="recent"></tbody></table></div></section>
+</main></body></html>

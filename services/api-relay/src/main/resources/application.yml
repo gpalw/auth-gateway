@@ -1,0 +1,47 @@
+server:
+  address: 127.0.0.1
+  port: ${RELAY_PORT:19091}
+  forward-headers-strategy: none
+  error:
+    include-message: never
+    include-stacktrace: never
+  tomcat:
+    threads:
+      max: 64
+    accept-count: 16
+    max-connections: 128
+    connection-timeout: 10s
+spring:
+  application:
+    name: api-relay
+  datasource:
+    url: ${RELAY_DATABASE_URL:jdbc:h2:file:./data/api-relay;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${RELAY_DATABASE_USERNAME:sa}
+    password: ${RELAY_DATABASE_PASSWORD:}
+relay:
+  mode: mock
+  upstream: http://127.0.0.1:19092/v1
+  provider-key: ${RELAY_PROVIDER_KEY:mock-provider-only}
+  pepper: ${RELAY_HASH_PEPPER:}
+  admin-token: ${RELAY_ADMIN_TOKEN:}
+  max-body-bytes: 32768
+  max-response-bytes: 1048576
+  timeout-seconds: 30
+  trusted-proxy-ips: []
+  prices:
+    - model: mock-text
+      version: mock-v1
+      input-per-million: 1.00
+      cached-per-million: 0.50
+      output-per-million: 2.00
+      max-output: 1024
+      max-input: 65536
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+relay:
+  mode: production
+  upstream: https://api.openai.com/v1
+  provider-key: ${RELAY_PROVIDER_KEY:}

@@ -1,0 +1,63 @@
+name: Relay checks (no deployment)
+on:
+  pull_request:
+    paths: ['services/api-relay/**', '.github/workflows/relay-ci.yml']
+  push:
+    branches: [feat/openai-relay-controlled-keys-20261115]
+    paths: ['services/api-relay/**', '.github/workflows/relay-ci.yml']
+permissions:
+  contents: read
+jobs:
+  local-relay-and-identity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Independent relay and existing identity regressions
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -f services/api-relay/pom.xml clean verify
+          ./mvnw -B clean verify
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: h2-and-identity-reports
+          path: |
+            services/api-relay/target/surefire-reports/
+            target/surefire-reports/
+  postgres-relay:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: relay_test
+          POSTGRES_USER: relay_test
+          POSTGRES_PASSWORD: local-fixture-only
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U relay_test -d relay_test" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Real PostgreSQL plus fake provider
+        env:
+          RELAY_TEST_POSTGRES_URL: jdbc:postgresql://127.0.0.1:5432/relay_test
+          RELAY_TEST_POSTGRES_PASSWORD: local-fixture-only
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -f services/api-relay/pom.xml clean verify
+      - name: Upload PostgreSQL reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: postgres-relay-reports
+          path: services/api-relay/target/surefire-reports/
