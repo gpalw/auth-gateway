@@ -90,10 +90,37 @@ safety margin. Keep ambiguous reservations held pending reconciliation.
 
 ## Remaining after the first slice
 
-Responses, models listing and SSE follow in the next commit. Production
-PostgreSQL, proxy disconnect handling, pricing, OIDC owner UI and a deployment
-path require additional validation. Do not expose this work publicly or claim
-the overall task complete.
+The following commits add Responses, models, SSE and policies. Production proxy
+behavior, actual pricing, OIDC owner UI and a deployment path still require
+additional validation. Do not expose this work publicly or claim the overall
+task complete.
+
+## Supported API subset and streaming
+
+`POST /v1/chat/completions`, `POST /v1/responses`, `GET /v1/models` are supported.
+Models are built from the intersection of each key's model policy and locally
+priced models; no provider call occurs. Chat accepts text messages, output cap,
+temperature/top_p, n=1 and stream options. Responses accepts string input or text
+message arrays, optional instructions, output cap, temperature/top_p and streaming.
+Both force `store=false`; Responses retrieval/background/conversations, hosted
+tools, tool definitions, images/audio/files and arbitrary extra options fail closed.
+This deliberately covers a bounded text subset, not every OpenAI SDK feature.
+
+Chat streaming forces `stream_options.include_usage=true`. The relay validates and
+flushes individual SSE frames in order (including nested tool-call delta shapes),
+buffers at most 64 KiB per event and enforces the configured total response ceiling.
+Responses settles on `response.completed`; chat settles after usage plus `[DONE]`.
+Disconnects close the provider stream; missing usage, timeout, incomplete/failed
+events and malformed streams retain the full hold. Error events contain only
+fixed relay codes. There are no automatic upstream POST retries. Nginx buffering
+and idle timeouts must be verified before public rollout.
+
+Prices are configured under `relay.prices` and must match the exact model identifier
+returned by the provider (use pinned model versions). Production startup rejects
+mock model schedules, absent credentials, non-OpenAI targets, forwarded-address
+rewriting, non-loopback binding and an identity/shared database configuration.
+The provider API field references used are the official [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
+and [Responses](https://developers.openai.com/api/reference/resources/responses/methods/create) references.
 
 ## Policy and accounting administration
 

@@ -29,7 +29,14 @@ import static org.assertj.core.api.Assertions.*;
 class RelayIntegrationTest {
     static final String ADMIN="test-only-admin-token-abcdefghijklmnopqrstuvwxyz";
     static final Fake FAKE=new Fake();
-    @DynamicPropertySource static void properties(DynamicPropertyRegistry r){r.add("relay.upstream",()->FAKE.origin+"/v1");}
+    @DynamicPropertySource static void properties(DynamicPropertyRegistry r){
+        r.add("relay.upstream",()->FAKE.origin+"/v1");
+        String pg=System.getenv("RELAY_TEST_POSTGRES_URL");
+        if(pg!=null){
+            if(!pg.matches("jdbc:postgresql://127\\.0\\.0\\.1:[0-9]+/relay_test"))throw new IllegalArgumentException("Tests require a disposable literal-loopback relay_test database");
+            r.add("spring.datasource.url",()->pg);r.add("spring.datasource.username",()->"relay_test");r.add("spring.datasource.password",()->"");
+        }
+    }
     @LocalServerPort int port;
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate db;
@@ -191,6 +198,65 @@ class RelayIntegrationTest {
         assertThat(db.queryForList("SELECT charge_month FROM relay_request",String.class)).containsExactlyInAnyOrder("2026-11","2026-12");
         assertThat(db.queryForList("SELECT price_version FROM relay_request",String.class)).containsOnly("mock-v1");
     }
+    @Test void responsesAndModelsUseOnlyLocalPermissionsAndNoStorage()throws Exception {
+        Key k=key("1");
+        assertThat(send("GET","/v1/models",k.token(),null).body()).contains("mock-text").doesNotContain("provider");
+        assertThat(FAKE.calls.get()).isZero();
+        var result=send("POST","/v1/responses",k.token(),"{\"model\":\"mock-text\",\"input\":\"private-fixture-prompt\",\"max_output_tokens\":100}");
+        assertThat(result.statusCode()).isEqualTo(200);assertThat(result.body()).contains("response","private-fixture-output");
+        assertThat(FAKE.request).contains("\"store\":false","max_output_tokens");
+        assertThat(db.queryForObject("SELECT status FROM relay_request",String.class)).isEqualTo("SETTLED");
+        assertThat(db.queryForObject("SELECT cost FROM relay_request",BigDecimal.class)).isEqualByComparingTo("0.000018");
+        for(String b:List.of("{\"model\":\"mock-text\",\"input\":\"hi\",\"tools\":[{\"type\":\"web_search\"}]}","{\"model\":\"mock-text\",\"input\":\"hi\",\"store\":true}","{\"model\":\"mock-text\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_image\",\"image_url\":\"https://example.test\"}]}]}"))
+            assertThat(send("POST","/v1/responses",k.token(),b).statusCode()).isEqualTo(400);
+        assertThat(FAKE.calls.get()).isEqualTo(1);
+    }
+    @Test void chatSsePreservesEventOrderAndToolDeltaShape()throws Exception {
+        Key k=key("1");var result=send("POST","/v1/chat/completions",k.token(),chat().replace("\"max_completion_tokens\":100","\"max_completion_tokens\":100,\"stream\":true"));
+        assertThat(result.statusCode()).isEqualTo(200);assertThat(result.headers().firstValue("Content-Type").orElse("")).startsWith("text/event-stream");
+        assertThat(result.body()).contains("tool_calls","arguments","[DONE]");
+        assertThat(result.body().indexOf("first-chunk")).isLessThan(result.body().indexOf("[DONE]"));
+        assertThat(FAKE.request).contains("\"include_usage\":true");
+        assertThat(db.queryForObject("SELECT status FROM relay_request",String.class)).isEqualTo("SETTLED");
+    }
+    @Test void responsesSseSettlesFinalCompletedUsage()throws Exception {
+        Key k=key("1");var result=send("POST","/v1/responses",k.token(),"{\"model\":\"mock-text\",\"input\":\"hello\",\"max_output_tokens\":100,\"stream\":true}");
+        assertThat(result.statusCode()).isEqualTo(200);assertThat(result.body()).contains("response.output_text.delta","response.completed");
+        assertThat(db.queryForObject("SELECT status FROM relay_request",String.class)).isEqualTo("SETTLED");
+    }
+    @Test void firstSseEventArrivesBeforeProviderFinishes()throws Exception {
+        Key k=key("1");FAKE.allowFinal=new CountDownLatch(1);
+        String body=chat().replace("\"max_completion_tokens\":100","\"max_completion_tokens\":100,\"stream\":true");
+        var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/v1/chat/completions")).header("Authorization","Bearer "+k.token()).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+        try(var in=client.send(request,HttpResponse.BodyHandlers.ofInputStream()).body()){
+            var reader=new java.io.BufferedReader(new java.io.InputStreamReader(in,StandardCharsets.UTF_8));
+            assertThat(reader.readLine()).contains("first-chunk");assertThat(FAKE.allowFinal.getCount()).isEqualTo(1);
+            FAKE.allowFinal.countDown();assertThat(reader.lines().reduce("",(a,b)->a+b)).contains("[DONE]");
+        }finally{FAKE.allowFinal.countDown();}
+    }
+    @Test void streamFaultsNeverReleaseAmbiguousUsageOrEchoProviderErrors()throws Exception {
+        Key k=key("1");String body=chat().replace("\"max_completion_tokens\":100","\"max_completion_tokens\":100,\"stream\":true");
+        for(String mode:List.of("missing","midstream","stream-error","slow-stream")){
+            FAKE.mode=mode;var result=send("POST","/v1/chat/completions",k.token(),body);
+            assertThat(result.body()).doesNotContain("provider-secret-fixture");
+        }
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM relay_request WHERE status='UNRESOLVED' AND held>0",Integer.class)).isEqualTo(4);
+        assertThat(FAKE.calls.get()).isEqualTo(4);
+    }
+    @Test void downstreamDisconnectCancelsProviderAndKeepsReservation()throws Exception {
+        Key k=key("1");FAKE.mode="disconnect";
+        String body=chat().replace("\"max_completion_tokens\":100","\"max_completion_tokens\":100,\"stream\":true");
+        try(Socket socket=new Socket("127.0.0.1",port)){
+            String headers="POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer "+k.token()+"\r\nContent-Type: application/json\r\nContent-Length: "+body.getBytes(StandardCharsets.UTF_8).length+"\r\n\r\n";
+            socket.getOutputStream().write((headers+body).getBytes(StandardCharsets.UTF_8));socket.getOutputStream().flush();
+            assertThat(socket.getInputStream().readNBytes(200)).hasSize(200);socket.setSoLinger(true,0);
+        }
+        long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(8);
+        while(System.nanoTime()<until && db.queryForObject("SELECT COUNT(*) FROM relay_request WHERE status='UNRESOLVED'",Integer.class)==0)Thread.sleep(20);
+        assertThat(db.queryForObject("SELECT status FROM relay_request",String.class)).isEqualTo("UNRESOLVED");
+        assertThat(db.queryForObject("SELECT held FROM relay_request",BigDecimal.class)).isGreaterThan(BigDecimal.ZERO);
+        assertThat(FAKE.calls.get()).isEqualTo(1);
+    }
     static class MutableClock extends Clock {
         volatile Instant now=Instant.parse("2026-11-14T20:00:00Z");
         public ZoneId getZone(){return ZoneOffset.UTC;}public Clock withZone(ZoneId zone){return this;}public Instant instant(){return now;}
@@ -198,18 +264,33 @@ class RelayIntegrationTest {
     static class Fake implements AutoCloseable {
         final HttpServer server;final String origin;final ExecutorService executor=Executors.newVirtualThreadPerTaskExecutor();
         final AtomicInteger calls=new AtomicInteger(),active=new AtomicInteger(),maxActive=new AtomicInteger();
-        volatile String mode="ok",authorization="",request="";volatile int delayMillis;
+        volatile String mode="ok",authorization="",request="";volatile int delayMillis;volatile CountDownLatch allowFinal=new CountDownLatch(0);
         Fake(){try{server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);origin="http://127.0.0.1:"+server.getAddress().getPort();server.createContext("/",this::handle);server.setExecutor(executor);server.start();}catch(Exception e){throw new IllegalStateException(e);}}
-        void reset(){calls.set(0);active.set(0);maxActive.set(0);mode="ok";delayMillis=0;authorization="";request="";}
+        void reset(){calls.set(0);active.set(0);maxActive.set(0);mode="ok";delayMillis=0;authorization="";request="";allowFinal=new CountDownLatch(0);}
         void handle(HttpExchange x){
             calls.incrementAndGet();maxActive.accumulateAndGet(active.incrementAndGet(),Math::max);
             try{authorization=x.getRequestHeaders().getFirst("Authorization");request=new String(x.getRequestBody().readAllBytes(),StandardCharsets.UTF_8);
                 if(delayMillis>0)Thread.sleep(delayMillis);
                 int code=mode.equals("429")?429:mode.equals("500")?500:200;
+                boolean responses=x.getRequestURI().getPath().equals("/v1/responses");
+                boolean stream=request.contains("\"stream\":true");
+                if(stream && code==200){sse(x,responses);return;}
                 String usage=mode.equals("missing")?"":" ,\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":4}}";
-                String body=code==200?"{\"id\":\"chatcmpl-fixture\",\"object\":\"chat.completion\",\"model\":\"mock-text\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"private-fixture-output\"},\"finish_reason\":\"stop\"}]"+usage+"}":"{\"error\":\"provider-secret-fixture\"}";
+                String body=code==200?(responses?responseJson():"{\"id\":\"chatcmpl-fixture\",\"object\":\"chat.completion\",\"model\":\"mock-text\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"private-fixture-output\"},\"finish_reason\":\"stop\"}]"+usage+"}"):"{\"error\":\"provider-secret-fixture\"}";
                 byte[] b=body.getBytes(StandardCharsets.UTF_8);x.getResponseHeaders().set("Content-Type","application/json");x.getResponseHeaders().set("x-request-id","req_fixture");x.sendResponseHeaders(code,b.length);x.getResponseBody().write(b);
             }catch(Exception ignored){}finally{active.decrementAndGet();x.close();}
+        }
+        String responseJson(){return "{\"id\":\"resp_fixture\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"mock-text\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"private-fixture-output\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"input_tokens_details\":{\"cached_tokens\":4}}}";}
+        void sse(HttpExchange x,boolean responses)throws Exception {
+            x.getResponseHeaders().set("Content-Type","text/event-stream");x.getResponseHeaders().set("x-request-id","req_stream_fixture");x.sendResponseHeaders(200,0);
+            String first=responses?"event: response.output_text.delta\r\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"first-chunk\"}\r\n\r\n":"data: {\"model\":\"mock-text\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"first-chunk\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{}\"}}]}}]}\r\n\r\n";
+            x.getResponseBody().write(first.getBytes(StandardCharsets.UTF_8));x.getResponseBody().flush();allowFinal.await(5,TimeUnit.SECONDS);
+            if(mode.equals("disconnect")){for(int i=0;i<10000;i++){x.getResponseBody().write(first.getBytes(StandardCharsets.UTF_8));x.getResponseBody().flush();Thread.sleep(5);}return;}
+            if(mode.equals("midstream"))return;
+            if(mode.equals("slow-stream"))Thread.sleep(3000);
+            if(mode.equals("stream-error")){x.getResponseBody().write("event: error\ndata: {\"error\":\"provider-secret-fixture\"}\n\n".getBytes(StandardCharsets.UTF_8));return;}
+            String last=responses?"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":"+responseJson()+"}\n\n":(mode.equals("missing")?"":"data: {\"model\":\"mock-text\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":4}}}\n\n")+"data: [DONE]\n\n";
+            x.getResponseBody().write(last.getBytes(StandardCharsets.UTF_8));x.getResponseBody().flush();
         }
         public void close(){server.stop(0);executor.shutdownNow();}
     }

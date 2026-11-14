@@ -29,17 +29,23 @@ final class RelayHttp extends OncePerRequestFilter {
             if(path.startsWith("/admin/")) { admin(req,res,path,method);return; }
             String token=Secrets.bearer(singleAuthorization(req));
             String source=sourcePolicy.client(req);
-            ledger.authorize(token,source);
-            if(!path.equals("/v1/chat/completions")) throw new RelayError(404,"endpoint_not_supported");
+            Ledger.Key key=ledger.authorize(token,source);
+            if(path.equals("/v1/models") && method.equals("GET")){
+                List<Map<String,Object>> models=key.models().stream().sorted().filter(m->settings.prices().stream().anyMatch(p->p.model().equals(m)))
+                    .map(m->Map.<String,Object>of("id",m,"object","model","created",0,"owned_by","relay")).toList();
+                reply(res,200,Map.of("object","list","data",models));return;
+            }
+            if(!Set.of("/v1/chat/completions","/v1/responses").contains(path)) throw new RelayError(404,"endpoint_not_supported");
             if(!method.equals("POST")) throw new RelayError(405,"method_not_allowed");
-            Payloads.Call call=payloads.chat(body(req));
+            Payloads.Call call=path.equals("/v1/responses")?payloads.responses(body(req)):payloads.chat(body(req));
             List<String> retryHeaders=Collections.list(req.getHeaders("Idempotency-Key"));
             if(retryHeaders.size()>1 || !retryHeaders.isEmpty() && !retryHeaders.getFirst().matches("[A-Za-z0-9._:-]{1,128}"))throw new RelayError(400,"invalid_idempotency_key");
             Ledger.Reservation r=ledger.reserve(token,call.model(),path,call.inputBound(),call.outputBound(),source,retryHeaders.isEmpty()?null:retryHeaders.getFirst());
             res.setHeader("X-Relay-Request-Id",r.id());
-            Upstream.Result result=upstream.chat(call,r);
-            res.setStatus(result.status());res.setContentType("application/json");res.getOutputStream().write(result.body());
-        } catch(RelayError e) {if(!res.isCommitted()) {if(e.status==429)res.setHeader("Retry-After","60");reply(res,e.status,Map.of("error",Map.of("message",e.code,"type","relay_error","code",e.code)));}}
+            upstream.relay(call,r,res);
+        } catch(RelayError e) {if(!res.isCommitted()) {if(e.status==429)res.setHeader("Retry-After","60");reply(res,e.status,Map.of("error",Map.of("message",e.code,"type","relay_error","code",e.code)));}
+            else if(res.getContentType()!=null && res.getContentType().startsWith("text/event-stream"))try{res.getOutputStream().write("event: error\ndata: {\"error\":{\"code\":\"relay_stream_failed\",\"message\":\"relay_stream_failed\"}}\n\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));res.flushBuffer();}catch(IOException ignored){}
+        }
         catch(Exception e) { if(!res.isCommitted()) reply(res,500,Map.of("error",Map.of("message","internal_error","type","relay_error","code","internal_error"))); }
     }
     private static String singleAuthorization(HttpServletRequest req) {
