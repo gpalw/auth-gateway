@@ -5,6 +5,7 @@ import java.net.*;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
+import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -33,8 +34,15 @@ class RelayIntegrationTest {
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate db;
     @Autowired Ledger ledger;
+    @Autowired org.springframework.transaction.PlatformTransactionManager tm;
+    @Autowired Secrets secrets;
+    @Autowired RelaySettings settings;
+    static final MutableClock CLOCK=new MutableClock();
+    @org.springframework.boot.test.context.TestConfiguration static class TimeConfig {
+        @org.springframework.context.annotation.Bean @org.springframework.context.annotation.Primary Clock testClock(){return CLOCK;}
+    }
     final HttpClient client=HttpClient.newHttpClient();
-    @BeforeEach void reset(){ db.update("DELETE FROM relay_event");db.update("DELETE FROM relay_request");db.update("DELETE FROM relay_key");FAKE.reset(); }
+    @BeforeEach void reset(){ db.update("DELETE FROM relay_key_event");db.update("DELETE FROM relay_event");db.update("DELETE FROM relay_request");db.update("DELETE FROM relay_key");FAKE.reset();CLOCK.now=Instant.parse("2026-11-14T20:00:00Z"); }
     @AfterAll static void close(){FAKE.close();}
     record Key(String id,String token){}
     Key key(String budget) throws Exception {
@@ -117,6 +125,75 @@ class RelayIntegrationTest {
         ledger.finish(r,10L,5L,4L,"req_fixture",false);ledger.finish(r,10L,5L,4L,"req_fixture",false);
         assertThat(db.queryForObject("SELECT COUNT(*) FROM relay_event",Integer.class)).isEqualTo(2);
         assertThat(db.queryForObject("SELECT cost FROM relay_request",BigDecimal.class)).isEqualByComparingTo("0.000018");
+    }
+    @Test void rotationExpirySourceAndPolicyChanges()throws Exception {
+        Key k=key("1");var rotated=send("POST","/admin/keys/"+k.id()+"/rotate",ADMIN,"{}");
+        assertThat(rotated.statusCode()).isEqualTo(201);String next=json.readTree(rotated.body()).path("token").asString();
+        assertThat(send("POST","/v1/chat/completions",k.token(),chat()).statusCode()).isEqualTo(401);
+        String policy="{\"models\":[\"mock-text\"],\"monthly_usd\":1,\"total_usd\":1,\"expires_at\":\"2026-11-14T20:01:00Z\",\"rpm\":1,\"max_concurrent\":1,\"source_cidrs\":[\"127.0.0.0/8\"]}";
+        assertThat(send("PUT","/admin/keys/"+k.id()+"/policy",ADMIN,policy).statusCode()).isEqualTo(200);
+        assertThat(send("POST","/v1/chat/completions",next,chat(),"X-Forwarded-For","127.0.0.1").statusCode()).isEqualTo(403);
+        assertThat(send("POST","/v1/chat/completions",next,chat()).statusCode()).isEqualTo(200);
+        assertThat(send("POST","/v1/chat/completions",next,chat()).body()).contains("gateway_rate_exceeded");
+        CLOCK.now=CLOCK.now.plusSeconds(60);
+        assertThat(send("POST","/v1/chat/completions",next,chat()).statusCode()).isEqualTo(401);
+        assertThat(FAKE.calls.get()).isEqualTo(1);
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM relay_key_event",Integer.class)).isEqualTo(3);
+    }
+    @Test void sourceDenialAndIpv6CidrAreNumericOnly()throws Exception {
+        var k=ledger.create("source",Set.of("mock-text"),BigDecimal.ONE,BigDecimal.ONE,new Ledger.Policy(null,60,2,List.of("203.0.113.0/24")));
+        assertThat(send("POST","/v1/chat/completions",String.valueOf(k.get("token")),chat()).statusCode()).isEqualTo(403);
+        assertThat(FAKE.calls.get()).isZero();
+        assertThat(SourcePolicy.permits("2001:db8::1","2001:db8::/32")).isTrue();
+        assertThat(SourcePolicy.permits("2001:db9::1","2001:db8::/32")).isFalse();
+        assertThatThrownBy(()->SourcePolicy.validate("localhost/8")).isInstanceOf(RelayError.class);
+        var noProxy=new SourcePolicy(settings);
+        assertThatThrownBy(()->noProxy.client("203.0.113.2",List.of("127.0.0.1"),false)).isInstanceOf(RelayError.class);
+        var withProxy=new SourcePolicy(new RelaySettings(settings.mode(),settings.upstream(),settings.providerKey(),settings.pepper(),settings.adminToken(),settings.maxBodyBytes(),settings.maxResponseBytes(),settings.timeoutSeconds(),settings.prices(),List.of("127.0.0.1")));
+        assertThat(withProxy.client("127.0.0.1",List.of("127.0.0.1, 203.0.113.9"),false)).isEqualTo("203.0.113.9");
+    }
+    @Test void rpmWindowConcurrencyAndRetryAdmissionUseDatabaseState()throws Exception {
+        var k=ledger.create("rate",Set.of("mock-text"),BigDecimal.TEN,BigDecimal.TEN,new Ledger.Policy(null,1,1,List.of()));String token=String.valueOf(k.get("token"));
+        var r=ledger.reserve(token,"mock-text","/v1/chat/completions",65536,100,"127.0.0.1","same-retry");
+        assertThatThrownBy(()->ledger.reserve(token,"mock-text","/v1/chat/completions",65536,100,"127.0.0.1","same-retry")).hasMessage("idempotency_key_already_used");
+        CLOCK.now=CLOCK.now.plusSeconds(60);
+        assertThatThrownBy(()->ledger.reserve(token,"mock-text","/v1/chat/completions",65536,100)).hasMessage("gateway_concurrency_exceeded");
+        ledger.finish(r,10L,5L,0L,null,false);
+        assertThat(ledger.reserve(token,"mock-text","/v1/chat/completions",65536,100)).isNotNull();
+    }
+    @Test void independentWorkersCannotOverReserveOrDoubleChargeRetries()throws Exception {
+        Key k=key("0.15");Ledger worker2=new Ledger(db,tm,secrets,settings,CLOCK);
+        try(var pool=Executors.newVirtualThreadPerTaskExecutor()){
+            List<Future<Boolean>> tasks=new ArrayList<>();CountDownLatch go=new CountDownLatch(1);
+            for(int i=0;i<24;i++){Ledger worker=i%2==0?ledger:worker2;tasks.add(pool.submit(()->{go.await();try{worker.reserve(k.token(),"mock-text","/v1/chat/completions",65536,100);return true;}catch(RelayError e){assertThat(e.status).isEqualTo(429);return false;}}));}
+            go.countDown();int successes=0;for(var f:tasks)if(f.get(15,TimeUnit.SECONDS))successes++;
+            assertThat(successes).isEqualTo(2);
+            assertThat(db.queryForObject("SELECT SUM(cost+held) FROM relay_request",BigDecimal.class)).isLessThanOrEqualTo(new BigDecimal("0.15"));
+        }
+    }
+    @Test void manualReconciliationPreservesEventsAndDoesNotDoubleApply()throws Exception {
+        Key k=key("1");FAKE.mode="missing";send("POST","/v1/chat/completions",k.token(),chat());
+        String id=db.queryForObject("SELECT id FROM relay_request",String.class);
+        String b="{\"verified_cost_usd\":0.00002,\"reason\":\"provider_usage_verified\"}";
+        assertThat(send("POST","/admin/requests/"+id+"/reconcile",ADMIN,b).statusCode()).isEqualTo(200);
+        assertThat(send("POST","/admin/requests/"+id+"/reconcile",ADMIN,b).statusCode()).isEqualTo(409);
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM relay_event",Integer.class)).isEqualTo(3);
+        assertThat(db.queryForObject("SELECT cost FROM relay_request",BigDecimal.class)).isEqualByComparingTo("0.00002");
+        assertThat(send("GET","/admin/usage",ADMIN,null).body()).contains("daily","monthly","outcomes");
+    }
+    @Test void utcMonthRolloverRetainsOldLiabilityAndPriceVersion()throws Exception {
+        Key k=key("0.1");CLOCK.now=Instant.parse("2026-11-30T23:59:59Z");
+        var old=ledger.reserve(k.token(),"mock-text","/v1/chat/completions",65536,100);
+        CLOCK.now=CLOCK.now.plusSeconds(2);
+        assertThatThrownBy(()->ledger.reserve(k.token(),"mock-text","/v1/chat/completions",65536,100)).hasMessage("gateway_budget_exceeded");
+        ledger.finish(old,10L,5L,0L,null,false);
+        ledger.reserve(k.token(),"mock-text","/v1/chat/completions",65536,100);
+        assertThat(db.queryForList("SELECT charge_month FROM relay_request",String.class)).containsExactlyInAnyOrder("2026-11","2026-12");
+        assertThat(db.queryForList("SELECT price_version FROM relay_request",String.class)).containsOnly("mock-v1");
+    }
+    static class MutableClock extends Clock {
+        volatile Instant now=Instant.parse("2026-11-14T20:00:00Z");
+        public ZoneId getZone(){return ZoneOffset.UTC;}public Clock withZone(ZoneId zone){return this;}public Instant instant(){return now;}
     }
     static class Fake implements AutoCloseable {
         final HttpServer server;final String origin;final ExecutorService executor=Executors.newVirtualThreadPerTaskExecutor();

@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("relay")
 public record RelaySettings(String mode, String upstream, String providerKey, String pepper, String adminToken,
-                            int maxBodyBytes, int maxResponseBytes, int timeoutSeconds, List<Price> prices) {
+                            int maxBodyBytes, int maxResponseBytes, int timeoutSeconds, List<Price> prices, List<String> trustedProxyIps) {
     public record Price(String model, String version, BigDecimal inputPerMillion, BigDecimal cachedPerMillion,
                         BigDecimal outputPerMillion, int maxOutput, int maxInput) {
         public BigDecimal cost(long input, long output, long cached) {
@@ -46,6 +46,8 @@ public record RelaySettings(String mode, String upstream, String providerKey, St
                 throw new IllegalArgumentException("Every model needs an explicit bounded, versioned price schedule");
         }
         prices=List.copyOf(prices);
+        trustedProxyIps=trustedProxyIps==null?List.of():List.copyOf(trustedProxyIps);
+        trustedProxyIps.forEach(SourcePolicy::address);
     }
     public Price price(String model) {
         return prices.stream().filter(p->p.model().equals(model)).findFirst().orElseThrow(()->new RelayError(403,"model_not_allowed"));

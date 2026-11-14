@@ -90,8 +90,42 @@ safety margin. Keep ambiguous reservations held pending reconciliation.
 
 ## Remaining after the first slice
 
-Responses, models listing, SSE, expiry/RPM/concurrency/IP controls, rotation,
-idempotent retry admission, owner usage summaries and manual reconciliation are
-subsequent commits. Production PostgreSQL, proxy disconnect handling, pricing,
-OIDC owner UI and a deployment path require additional validation. Do not expose
-this first slice publicly or claim the overall task complete.
+Responses, models listing and SSE follow in the next commit. Production
+PostgreSQL, proxy disconnect handling, pricing, OIDC owner UI and a deployment
+path require additional validation. Do not expose this work publicly or claim
+the overall task complete.
+
+## Policy and accounting administration
+
+Creation accepts `expires_at` (UTC ISO instant), `rpm` (1–6000),
+`max_concurrent` (1–64) and `source_cidrs` (numeric IPv4/IPv6 networks).
+Defaults are 60 RPM, eight concurrent calls, no expiry or source restriction.
+`PUT /admin/keys/{id}/policy` replaces the full policy and budgets; include all
+desired values. Reducing a budget below existing liability blocks new calls.
+`POST /admin/keys/{id}/rotate` returns the replacement token once; old credentials
+immediately fail new admission. Existing dispatched calls can still finish.
+
+RPM uses a fixed UTC minute and counts admitted POSTs, including provider failures.
+Concurrency counts RESERVED requests. All counters use the same database key-row
+lock as budgets, including across independent workers. Rate admission has no queue.
+`Idempotency-Key` (1–128 ASCII identifier characters) is optional: reuse for that
+key returns 409 before dispatch, even after settlement or rotation. Responses are
+not cached. Without this header, each client retry is a new billable request.
+
+Client addresses come from the original TCP peer. A configured
+`relay.trusted-proxy-ips` literal address may supply one X-Forwarded-For header;
+the **rightmost** address is used, and the proxy must append its observed peer.
+Untrusted forwarding and RFC Forwarded are rejected. Admin always rejects all
+forwarding headers. Leave the trust list empty for direct local use. The future
+public proxy must deny `/admin/` independently and preserve this transport contract.
+
+`GET /admin/usage` returns prefix-safe recent requests (last 200), UTC daily and
+monthly costs/held liabilities, token counts and outcome counts. No prompts or
+outputs are stored. `POST /admin/requests/{id}/reconcile` accepts
+`{"verified_cost_usd":0.00002,"reason":"provider_usage_verified"}` or zero cost
+with `provider_no_charge_verified`. The operator must actually verify provider
+billing first. Only UNRESOLVED entries can be reconciled; stale RESERVED entries
+older than three provider timeout periods plus 60 seconds can be recovered through
+the same operation. Original holds/events are retained; repeat reconciliation is
+409. A verified cost above the reservation is recorded in full and blocks further
+admission when over budget. Never infer no charge just from a timeout or crash.

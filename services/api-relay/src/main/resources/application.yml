@@ -5,6 +5,12 @@ server:
   error:
     include-message: never
     include-stacktrace: never
+  tomcat:
+    threads:
+      max: 64
+    accept-count: 16
+    max-connections: 128
+    connection-timeout: 10s
 spring:
   application:
     name: api-relay
@@ -21,6 +27,7 @@ relay:
   max-body-bytes: 32768
   max-response-bytes: 1048576
   timeout-seconds: 30
+  trusted-proxy-ips: []
   prices:
     - model: mock-text
       version: mock-v1
