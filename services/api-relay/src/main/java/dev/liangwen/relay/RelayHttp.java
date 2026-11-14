@@ -25,7 +25,15 @@ final class RelayHttp extends OncePerRequestFilter {
         try {
             String path=req.getRequestURI(), method=req.getMethod();
             if(req.getQueryString()!=null) throw new RelayError(400,"query_not_supported");
-            if(path.equals("/health") && method.equals("GET")) {reply(res,200,Map.of("status","UP","mode",settings.mode()));return;}
+            if(path.equals("/health") && method.equals("GET")) {boolean up=ledger.healthy();reply(res,up?200:503,Map.of("status",up?"UP":"DOWN","mode",settings.mode()));return;}
+            if(method.equals("GET") && Set.of("/dashboard","/dashboard.js","/dashboard.css").contains(path)) {
+                // Public shell contains no data; every data request still requires the owner bearer and loopback peer.
+                res.setHeader("Content-Security-Policy","default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+                res.setHeader("Referrer-Policy","no-referrer");
+                String resource=path.equals("/dashboard")?"/dashboard.html":path;
+                res.setContentType(resource.endsWith(".html")?"text/html;charset=UTF-8":resource.endsWith(".css")?"text/css":"application/javascript");
+                try(InputStream in=RelayHttp.class.getResourceAsStream(resource)){if(in==null)throw new RelayError(404,"not_found");in.transferTo(res.getOutputStream());}return;
+            }
             if(path.startsWith("/admin/")) { admin(req,res,path,method);return; }
             String token=Secrets.bearer(singleAuthorization(req));
             String source=sourcePolicy.client(req);

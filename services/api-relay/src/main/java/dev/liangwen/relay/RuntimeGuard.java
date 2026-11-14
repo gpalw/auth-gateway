@@ -9,6 +9,7 @@ final class RuntimeGuard {
         if (!"127.0.0.1".equals(env.getProperty("server.address"))
                 || !"none".equals(env.getProperty("server.forward-headers-strategy")))
             throw new IllegalArgumentException("Relay must bind loopback with original transport addresses");
+        if("19090".equals(env.getProperty("server.port")))throw new IllegalArgumentException("Identity service port is reserved");
         boolean production=java.util.Arrays.asList(env.getActiveProfiles()).contains("production");
         if(production && !settings.mode().equals("production")) throw new IllegalArgumentException("Production profile requires production mode");
         if(settings.mode().equals("production")) {

@@ -1,0 +1,43 @@
+// Two actual JVMs share only PostgreSQL. Requires a disposable loopback relay_test DB.
+const fs=require('node:fs'),path=require('node:path'),net=require('node:net'),http=require('node:http'),crypto=require('node:crypto'),assert=require('node:assert/strict');
+const {spawn}=require('node:child_process');
+const db=process.env.RELAY_TEST_POSTGRES_URL;if(!/^jdbc:postgresql:\/\/127\.0\.0\.1:\d+\/relay_test$/.test(db||''))throw new Error('Set a disposable loopback RELAY_TEST_POSTGRES_URL');
+const root=path.resolve(__dirname,'..'),out=path.join(root,'target/multiworker');fs.mkdirSync(out,{recursive:true});
+const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const freePort=()=>new Promise(resolve=>{const s=net.createServer();s.listen(0,'127.0.0.1',()=>{const port=s.address().port;s.close(()=>resolve(port));});});
+let workers=[],fake,mode='ok',calls=0,active=0,maxActive=0;const report={checks:[]};
+const record=(name,details={})=>{report.checks.push({name,passed:true,...details});console.log('PASS '+name);};
+const normalize=row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[key.toLowerCase(),value]));
+(async()=>{
+  fake=http.createServer(async(req,res)=>{calls++;active++;maxActive=Math.max(maxActive,active);res.on('close',()=>active--);req.resume();
+    if(mode==='hang')return;await delay(500);res.writeHead(200,{'Content-Type':'application/json','x-request-id':'req_multijvm'});
+    res.end(JSON.stringify({id:'chatcmpl-fixture',model:'mock-text',choices:[{message:{role:'assistant',content:'fixture'},finish_reason:'stop'}],usage:{prompt_tokens:10,completion_tokens:5}}));
+  });await new Promise(resolve=>fake.listen(0,'127.0.0.1',resolve));
+  const fakePort=fake.address().port,admin=crypto.randomBytes(32).toString('base64'),pepper=crypto.randomBytes(32).toString('base64');
+  const log=fs.openSync(path.join(out,'runtime.log'),'w'),java=process.env.JAVA_HOME?path.join(process.env.JAVA_HOME,'bin',process.platform==='win32'?'java.exe':'java'):'java';
+  const start=async port=>{
+    const app=spawn(java,['-jar',path.join(root,'target/api-relay-0.0.1-SNAPSHOT.jar')],{cwd:root,windowsHide:true,stdio:['ignore',log,log],env:{...process.env,RELAY_PORT:String(port),RELAY_UPSTREAM:'http://127.0.0.1:'+fakePort+'/v1',RELAY_DATABASE_URL:db,RELAY_DATABASE_USERNAME:'relay_test',RELAY_DATABASE_PASSWORD:process.env.RELAY_TEST_POSTGRES_PASSWORD||'',RELAY_HASH_PEPPER:pepper,RELAY_ADMIN_TOKEN:admin,RELAY_TIMEOUT_SECONDS:'2'}});
+    workers.push(app);for(let i=0;i<150;i++){try{if((await fetch('http://127.0.0.1:'+port+'/health')).ok)return app;}catch{}if(app.exitCode!==null)break;await delay(100);}throw new Error('Worker failed to start; inspect target/multiworker/runtime.log');
+  };
+  const ports=[await freePort(),await freePort()];let a=await start(ports[0]),b=await start(ports[1]);
+  const call=(port,method,url,token,body)=>fetch('http://127.0.0.1:'+port+url,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  const makeKey=async budget=>{const r=await call(ports[0],'POST','/admin/keys',admin,{name:'Multi JVM fixture',models:['mock-text'],monthly_usd:budget,total_usd:budget});assert.equal(r.status,201);return r.json();};
+  const chat={model:'mock-text',messages:[{role:'user',content:'fixture'}],max_completion_tokens:100};
+  const key=await makeKey(0.15);
+  const responses=await Promise.all(Array.from({length:24},(_,i)=>call(ports[i%2],'POST','/v1/chat/completions',key.token,chat)));
+  const codes=responses.map(r=>r.status),accepted=codes.filter(code=>code===200).length;await Promise.all(responses.map(r=>r.text()));
+  assert(codes.every(code=>code===200||code===429));assert(codes.includes(429));assert(maxActive<=2);assert.equal(calls,accepted);
+  record('24 requests across two JVMs respect shared conservative budget',{accepted,rejected:24-accepted,maxUpstreamConcurrent:maxActive});
+  assert.equal((await call(ports[0],'POST','/admin/keys/'+key.id+'/revoke',admin,{})).status,200);
+  assert.equal((await call(ports[1],'POST','/v1/chat/completions',key.token,chat)).status,401);
+  await new Promise(resolve=>{b.once('exit',resolve);b.kill();});b=await start(ports[1]);
+  assert.equal((await call(ports[1],'POST','/v1/chat/completions',key.token,chat)).status,401);record('Revocation survives another worker and process restart');
+  const crashKey=await makeKey(0.1);mode='hang';const before=calls;
+  const pending=call(ports[0],'POST','/v1/chat/completions',crashKey.token,chat).then(r=>r.text()).catch(()=>null);
+  for(let i=0;i<100&&calls===before;i++)await delay(10);assert.equal(calls,before+1);
+  await new Promise(resolve=>{a.once('exit',resolve);a.kill();});await pending;mode='ok';a=await start(ports[0]);
+  assert.equal((await call(ports[0],'POST','/v1/chat/completions',crashKey.token,chat)).status,429);assert.equal(calls,before+1);
+  const usage=await (await call(ports[0],'GET','/admin/usage',admin)).json();const row=usage.requests.map(normalize).find(r=>r.key_id===crashKey.id);
+  assert.equal(row.status,'RESERVED');assert(Number(row.held)>0);record('Hard worker termination retains durable liability and blocks new upstream calls');
+  fs.writeFileSync(path.join(out,'report.json'),JSON.stringify(report,null,2));
+})().catch(error=>{console.error(error.message);process.exitCode=1;}).finally(()=>{for(const worker of workers)if(worker.exitCode===null)worker.kill();if(fake){fake.closeAllConnections();fake.close();}});

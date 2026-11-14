@@ -34,7 +34,7 @@ class RelayIntegrationTest {
         String pg=System.getenv("RELAY_TEST_POSTGRES_URL");
         if(pg!=null){
             if(!pg.matches("jdbc:postgresql://127\\.0\\.0\\.1:[0-9]+/relay_test"))throw new IllegalArgumentException("Tests require a disposable literal-loopback relay_test database");
-            r.add("spring.datasource.url",()->pg);r.add("spring.datasource.username",()->"relay_test");r.add("spring.datasource.password",()->"");
+            r.add("spring.datasource.url",()->pg);r.add("spring.datasource.username",()->"relay_test");r.add("spring.datasource.password",()->System.getenv().getOrDefault("RELAY_TEST_POSTGRES_PASSWORD",""));
         }
     }
     @LocalServerPort int port;
@@ -51,6 +51,11 @@ class RelayIntegrationTest {
     final HttpClient client=HttpClient.newHttpClient();
     @BeforeEach void reset(){ db.update("DELETE FROM relay_key_event");db.update("DELETE FROM relay_event");db.update("DELETE FROM relay_request");db.update("DELETE FROM relay_key");FAKE.reset();CLOCK.now=Instant.parse("2026-11-14T20:00:00Z"); }
     @AfterAll static void close(){FAKE.close();}
+    @AfterEach void waitForFakeToClose()throws Exception {
+        long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(6);
+        while(FAKE.active.get()>0 && System.nanoTime()<until)Thread.sleep(20);
+        assertThat(FAKE.active.get()).isZero();
+    }
     record Key(String id,String token){}
     Key key(String budget) throws Exception {
         var response=send("POST","/admin/keys",ADMIN,"{\"name\":\"fixture\",\"models\":[\"mock-text\"],\"monthly_usd\":"+budget+",\"total_usd\":"+budget+"}");
@@ -256,6 +261,34 @@ class RelayIntegrationTest {
         assertThat(db.queryForObject("SELECT status FROM relay_request",String.class)).isEqualTo("UNRESOLVED");
         assertThat(db.queryForObject("SELECT held FROM relay_request",BigDecimal.class)).isGreaterThan(BigDecimal.ZERO);
         assertThat(FAKE.calls.get()).isEqualTo(1);
+    }
+    @Test void duplicateTrailingAndDeepJsonAndWrongContentTypeFailBeforeProvider()throws Exception {
+        Key k=key("1");
+        assertThat(json.isEnabled(tools.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)).isTrue();
+        for(String body:List.of(chat()+" {}",chat().replace("\"model\":\"mock-text\"","\"model\":\"mock-text\",\"model\":\"mock-text\""),"{\"nested\":"+"[".repeat(20)+"0"+"]".repeat(20)+"}"))
+            assertThat(send("POST","/v1/chat/completions",k.token(),body).statusCode()).isEqualTo(400);
+        var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/v1/chat/completions")).header("Authorization","Bearer "+k.token()).header("Content-Type","text/plain").POST(HttpRequest.BodyPublishers.ofString(chat())).build();
+        assertThat(client.send(request,HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(415);assertThat(FAKE.calls.get()).isZero();
+    }
+    @Test void httpIdempotencyDuplicateIsRejectedBeforeUpstream()throws Exception {
+        Key k=key("1");assertThat(send("POST","/v1/chat/completions",k.token(),chat(),"Idempotency-Key","retry-1").statusCode()).isEqualTo(200);
+        assertThat(send("POST","/v1/chat/completions",k.token(),chat(),"Idempotency-Key","retry-1").statusCode()).isEqualTo(409);assertThat(FAKE.calls.get()).isEqualTo(1);
+    }
+    @Test void immutablePricingRejectsSameVersionWithDifferentRates(){
+        var p=settings.prices().getFirst();var changed=new RelaySettings.Price(p.model(),p.version(),p.inputPerMillion().add(BigDecimal.ONE),p.cachedPerMillion(),p.outputPerMillion(),p.maxOutput(),p.maxInput());
+        var conflict=new RelaySettings(settings.mode(),settings.upstream(),settings.providerKey(),settings.pepper(),settings.adminToken(),settings.maxBodyBytes(),settings.maxResponseBytes(),settings.timeoutSeconds(),List.of(changed),List.of());
+        assertThatThrownBy(()->new Ledger(db,tm,secrets,conflict,CLOCK)).hasMessageContaining("price version cannot be changed");
+    }
+    @Test void invalidReportedUsageAndStaleCrashHoldRequireReconciliation()throws Exception {
+        Key k=key("1");var r=ledger.reserve(k.token(),"mock-text","/v1/chat/completions",65536,100);
+        ledger.finish(r,10L,101L,0L,"sk-fixture-secret",false);
+        assertThat(db.queryForObject("SELECT status FROM relay_request",String.class)).isEqualTo("UNRESOLVED");
+        assertThat(db.queryForObject("SELECT upstream_id FROM relay_request",String.class)).isNull();
+        assertThat(db.queryForObject("SELECT error_category FROM relay_request",String.class)).isEqualTo("missing_or_invalid_usage");
+        var stale=ledger.reserve(k.token(),"mock-text","/v1/chat/completions",65536,100);
+        assertThatThrownBy(()->ledger.reconcile(stale.id(),BigDecimal.ZERO,"provider_no_charge_verified")).hasMessage("request_not_reconcilable");
+        CLOCK.now=CLOCK.now.plusSeconds(70);ledger.reconcile(stale.id(),BigDecimal.ZERO,"provider_no_charge_verified");
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM relay_event WHERE kind='STALE_HOLD'",Integer.class)).isEqualTo(1);
     }
     static class MutableClock extends Clock {
         volatile Instant now=Instant.parse("2026-11-14T20:00:00Z");

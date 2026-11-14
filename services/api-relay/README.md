@@ -58,7 +58,25 @@ They check 24 simultaneous calls against a low budget, correct provider credenti
 substitution, safe audit data, invalid request rejection, revocation, failed and
 missing usage, management protection and double-settlement prevention.
 
-## First-slice accounting decisions
+For a disposable PostgreSQL fixture, create database/user `relay_test`, bind it to
+literal loopback on a test-only port, then set `RELAY_TEST_POSTGRES_URL` to
+`jdbc:postgresql://127.0.0.1:<port>/relay_test` and optional
+`RELAY_TEST_POSTGRES_PASSWORD`. Run the same Maven command. The test URL validator
+rejects other hosts/database names because tests delete fixture rows. Never point
+the suite at an operational database. Unset these variables for the H2 run.
+
+The packaged JAR plus Python-fake/Chromium check is:
+
+```powershell
+# Requires an installed playwright-core and Chromium; optional environment paths:
+# PLAYWRIGHT_PACKAGE, CHROME_PATH, JAVA_HOME, PYTHON.
+node services/api-relay/scripts/verify-dashboard.cjs
+```
+
+Reports/screenshots are placed in `services/api-relay/target/browser/`. The check
+creates only ephemeral local credentials and closes both fixture processes.
+
+## Accounting decisions
 
 Keys use 256-bit random secrets and HMAC-SHA256 with an independent persistent
 pepper. Only the lookup UUID, prefix and keyed digest are stored. Key metadata
@@ -88,12 +106,11 @@ An exact provider-billed hard stop cannot be guaranteed: provider templates,
 pricing revisions and asynchronous charges require verified schedules and a
 safety margin. Keep ambiguous reservations held pending reconciliation.
 
-## Remaining after the first slice
+## Remaining validation
 
-The following commits add Responses, models, SSE and policies. Production proxy
-behavior, actual pricing, OIDC owner UI and a deployment path still require
-additional validation. Do not expose this work publicly or claim the overall
-task complete.
+Production proxy behavior, actual pricing, OIDC owner UI and the deployment path
+still require additional validation. Do not expose this work publicly or claim
+the overall task complete.
 
 ## Supported API subset and streaming
 
@@ -121,6 +138,28 @@ mock model schedules, absent credentials, non-OpenAI targets, forwarded-address
 rewriting, non-loopback binding and an identity/shared database configuration.
 The provider API field references used are the official [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
 and [Responses](https://developers.openai.com/api/reference/resources/responses/methods/create) references.
+
+Price schedules are persisted in `relay_price`. A model/version pair is immutable:
+changing its rates/ceilings fails startup; register a new version instead. Old
+schedules remain available for audit. JSON parsing rejects duplicate fields,
+trailing documents, overlong numbers and excessive nesting. Accounting stores
+safe error categories, never raw provider error messages.
+
+## Private usage view and release handoff
+
+Open `http://127.0.0.1:19091/dashboard` directly or through an SSH tunnel. The shell
+contains no private data. Supply the owner token to load prefix-only keys, daily
+usage, estimated settled costs, held liabilities and recent error categories.
+The token is cleared from the input after loading and never saved in local/session
+storage. Clear view removes the displayed data. All data APIs still require the
+owner bearer and original loopback transport; the public proxy must block both
+management APIs and the dashboard. Key mutation remains in the protected API.
+
+See [RELEASE.md](RELEASE.md) for the actual main-triggered identity deployment,
+the separate relay release path from the resulting main SHA, target-host gates,
+online authentication acceptance and rollback. `deploy/` contains review-only
+templates; no service or DNS changes are applied. Main merge and online acceptance
+remain outside this development handoff.
 
 ## Policy and accounting administration
 

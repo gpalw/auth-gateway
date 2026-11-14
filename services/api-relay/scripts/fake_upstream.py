@@ -2,6 +2,7 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import time
+import argparse
 
 
 class Fake(BaseHTTPRequestHandler):
@@ -66,5 +67,8 @@ class Fake(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print("Charge-free fake upstream: http://127.0.0.1:19092/v1", flush=True)
-    ThreadingHTTPServer(("127.0.0.1", 19092), Fake).serve_forever()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=19092)
+    port = parser.parse_args().port
+    print(f"Charge-free fake upstream: http://127.0.0.1:{port}/v1", flush=True)
+    ThreadingHTTPServer(("127.0.0.1", port), Fake).serve_forever()

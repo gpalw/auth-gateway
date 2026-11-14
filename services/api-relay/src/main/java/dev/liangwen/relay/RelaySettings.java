@@ -48,8 +48,11 @@ public record RelaySettings(String mode, String upstream, String providerKey, St
         prices=List.copyOf(prices);
         trustedProxyIps=trustedProxyIps==null?List.of():List.copyOf(trustedProxyIps);
         trustedProxyIps.forEach(SourcePolicy::address);
+        if(mode.equals("production") && (providerKey.startsWith("mock") || providerKey.contains("REPLACE_")
+                || pepper.contains("REPLACE_") || adminToken.contains("REPLACE_")))throw new IllegalArgumentException("Production credentials cannot use mock/template values");
     }
     public Price price(String model) {
         return prices.stream().filter(p->p.model().equals(model)).findFirst().orElseThrow(()->new RelayError(403,"model_not_allowed"));
     }
+    @Override public String toString(){return "RelaySettings[mode="+mode+", credentials=REDACTED]";}
 }

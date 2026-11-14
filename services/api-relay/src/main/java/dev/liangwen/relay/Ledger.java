@@ -18,6 +18,17 @@ final class Ledger {
     private final Clock clock;
     Ledger(JdbcTemplate db, org.springframework.transaction.PlatformTransactionManager tm, Secrets secrets, RelaySettings settings, Clock clock) {
         this.db=db; this.tx=new TransactionTemplate(tm); this.secrets=secrets; this.settings=settings; this.clock=clock;
+        for(var p:settings.prices()) {
+            try {db.update("INSERT INTO relay_price(model,version,input_per_million,cached_per_million,output_per_million,max_input,max_output) VALUES(?,?,?,?,?,?,?)",
+                p.model(),p.version(),p.inputPerMillion(),p.cachedPerMillion(),p.outputPerMillion(),p.maxInput(),p.maxOutput());}
+            catch(org.springframework.dao.DuplicateKeyException alreadyRegistered) { /* Another worker may register the same immutable schedule. */ }
+            Map<String,Object> stored=db.queryForMap("SELECT * FROM relay_price WHERE model=? AND version=?",p.model(),p.version());
+            if(((BigDecimal)stored.get("input_per_million")).compareTo(p.inputPerMillion())!=0
+                || ((BigDecimal)stored.get("cached_per_million")).compareTo(p.cachedPerMillion())!=0
+                || ((BigDecimal)stored.get("output_per_million")).compareTo(p.outputPerMillion())!=0
+                || ((Number)stored.get("max_input")).intValue()!=p.maxInput() || ((Number)stored.get("max_output")).intValue()!=p.maxOutput())
+                throw new IllegalArgumentException("A price version cannot be changed; register a new version");
+        }
     }
     record Key(String id,String hash,boolean revoked,Set<String> models,BigDecimal monthly,BigDecimal total,
                Instant expires,int rpm,int maxConcurrent,List<String> cidrs,long rateMinute,int rateCount) {}
@@ -100,6 +111,9 @@ final class Ledger {
         });
     }
     void finish(Reservation r,Long input,Long output,Long cached,String upstreamId,boolean knownFree) {
+        finish(r,input,output,cached,upstreamId,knownFree,null);
+    }
+    void finish(Reservation r,Long input,Long output,Long cached,String upstreamId,boolean knownFree,String category) {
         tx.executeWithoutResult(status->{
             db.queryForObject("SELECT id FROM relay_key WHERE id=? FOR UPDATE",String.class,r.keyId());
             String state=db.queryForObject("SELECT status FROM relay_request WHERE id=?",String.class,r.id());
@@ -110,14 +124,19 @@ final class Ledger {
             BigDecimal held=knownFree || valid ? BigDecimal.ZERO:r.maximum();
             String next=knownFree?"REJECTED":valid?"SETTLED":"UNRESOLVED";
             // Provider values outside the reserved bounds are an accounting anomaly, never silently free.
-            String safeId=upstreamId!=null && upstreamId.matches("[A-Za-z0-9_-]{1,100}")?upstreamId:null;
-            db.update("UPDATE relay_request SET cost=?,held=?,status=?,input_tokens=?,output_tokens=?,cached_tokens=?,upstream_id=?,updated_at=? WHERE id=?",
-                cost,held,next,valid?input:null,valid?output:null,valid?cached:null,safeId,clock.instant().toString(),r.id());
-            event(r.id(),next,cost,held);
+            String safeId=upstreamId!=null && upstreamId.matches("req_[A-Za-z0-9_-]{1,80}")?upstreamId:null;
+            String error=valid?null:category==null?"missing_or_invalid_usage":category;
+            if(error!=null && !error.matches("[a-z0-9_]{1,48}"))throw new IllegalArgumentException("Unsafe error category");
+            db.update("UPDATE relay_request SET cost=?,held=?,status=?,input_tokens=?,output_tokens=?,cached_tokens=?,upstream_id=?,updated_at=?,error_category=? WHERE id=?",
+                cost,held,next,valid?input:null,valid?output:null,valid?cached:null,safeId,clock.instant().toString(),error,r.id());
+            event(r.id(),next,cost,held,error);
         });
     }
     private void event(String requestId,String kind,BigDecimal cost,BigDecimal held) {
-        db.update("INSERT INTO relay_event(id,request_id,kind,cost,held,created_at) VALUES(?,?,?,?,?,?)",UUID.randomUUID().toString(),requestId,kind,cost,held,clock.instant().toString());
+        event(requestId,kind,cost,held,null);
+    }
+    private void event(String requestId,String kind,BigDecimal cost,BigDecimal held,String error) {
+        db.update("INSERT INTO relay_event(id,request_id,kind,cost,held,created_at,error_category) VALUES(?,?,?,?,?,?,?)",UUID.randomUUID().toString(),requestId,kind,cost,held,clock.instant().toString(),error);
     }
     void revoke(String id) {
         tx.executeWithoutResult(s->{
@@ -165,10 +184,11 @@ final class Ledger {
         });
     }
     List<Map<String,Object>> keys() { return db.queryForList("SELECT id,name,prefix,revoked,models,monthly_budget,total_budget,expires_at,rpm,max_concurrent,source_cidrs,created_at FROM relay_key ORDER BY created_at"); }
-    List<Map<String,Object>> requests() { return db.queryForList("SELECT id,key_id,model,endpoint,charge_month,price_version,reservation,cost,held,status,input_tokens,output_tokens,cached_tokens,upstream_id,created_at,updated_at FROM relay_request ORDER BY created_at DESC LIMIT 200"); }
+    List<Map<String,Object>> requests() { return db.queryForList("SELECT id,key_id,model,endpoint,charge_month,price_version,reservation,cost,held,status,input_tokens,output_tokens,cached_tokens,upstream_id,error_category,created_at,updated_at FROM relay_request ORDER BY created_at DESC LIMIT 200"); }
     Map<String,Object> usage() {
         return Map.of("requests",requests(),"daily",db.queryForList("SELECT key_id,SUBSTRING(created_at,1,10) AS usage_day,COUNT(*) AS requests,SUM(cost) AS cost,SUM(held) AS held,SUM(input_tokens) AS input_tokens,SUM(output_tokens) AS output_tokens,SUM(cached_tokens) AS cached_tokens FROM relay_request GROUP BY key_id,SUBSTRING(created_at,1,10)"),
             "monthly",db.queryForList("SELECT key_id,charge_month,COUNT(*) AS requests,SUM(cost) AS cost,SUM(held) AS held FROM relay_request GROUP BY key_id,charge_month"),
-            "outcomes",db.queryForList("SELECT key_id,status,COUNT(*) AS requests FROM relay_request GROUP BY key_id,status"));
+            "outcomes",db.queryForList("SELECT key_id,status,error_category,COUNT(*) AS requests FROM relay_request GROUP BY key_id,status,error_category"));
     }
+    boolean healthy(){try{return Integer.valueOf(1).equals(db.queryForObject("SELECT 1",Integer.class));}catch(Exception e){return false;}}
 }

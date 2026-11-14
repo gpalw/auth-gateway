@@ -34,7 +34,7 @@ final class Upstream {
                 try {
                     if (response.statusCode()!=200) {
                         boolean free=Set.of(400,401,403,404,422,429).contains(response.statusCode());
-                        ledger.finish(reservation,null,null,null,null,free);
+                        ledger.finish(reservation,null,null,null,null,free,"upstream_http_"+response.statusCode());
                         int status=response.statusCode()>=400 && response.statusCode()<=599?response.statusCode():502;
                         throw new RelayError(status,"upstream_rejected");
                     }
@@ -56,10 +56,10 @@ final class Upstream {
                     }
                 } finally {deadline.cancel(false);}
             }
-        } catch(RelayError e) { ledger.finish(reservation,null,null,null,null,false);throw e; }
+        } catch(RelayError e) { ledger.finish(reservation,null,null,null,null,false,e.code);throw e; }
         catch(Exception e) {
             if(e instanceof InterruptedException) Thread.currentThread().interrupt();
-            ledger.finish(reservation,null,null,null,null,false);throw new RelayError(502,"upstream_unavailable");
+            ledger.finish(reservation,null,null,null,null,false,e instanceof HttpTimeoutException?"upstream_timeout":e instanceof IOException?"upstream_or_client_io":"upstream_unavailable");throw new RelayError(502,"upstream_unavailable");
         }
     }
     private void settle(Ledger.Reservation r,JsonNode usage,boolean responses,String upstreamId) {
